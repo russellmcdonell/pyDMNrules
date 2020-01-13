@@ -15,22 +15,22 @@ The data in these three columns describe the inputs and outputs associated with 
 'Variable' can be any text and is used to pass data to and from pyDMNrules.
 'Business Concept' and 'Attribute' must be valid S-FEEL names, but may **not** contain the dot, or period character.
 
-Glossary |         | 
--------- | --------- | ----------
-Variable | Business Concept | Attribute
-Customer | Customer | sector
-OrderSize | Order | orderSize
-Deliver | | delivery
-Discount | Discount | discount
+| Glossary |                  |           |
+|----------|------------------|-----------|
+| Variable | Business Concept | Sector    |
+| Customer | Customer         | sector    |
+| OderSize | Order            | orderSize |
+| Delivery |                  | delivery  |
+| Discount | Discount         | discount  |
 
 The 'Decision' tab must contain a table headed 'Decision' with the headings 'Decisions' and 'Execute Decision Table'.
 The row contain a description and the name of a DMN rules table. pyDMNrules will execute each decision table in this order.
 
-Decision |  
--------- | --------
-Decisions | Execute Decision Table
-Determine Discount | Discount
-
+| Decision           |                        |
+|--------------------|------------------------|
+| Decisions          | Execute Decision Table |
+| Determine Discount | Discount               |
+| Discount           | Discount               |
 
 USAGE:
 
