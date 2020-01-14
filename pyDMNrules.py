@@ -166,7 +166,7 @@ class pyDMNrules():
 
 
     def value2sfeel(self, value):
-        if value == None:
+        if value is None:
             return 'null'
         elif isinstance(value, str):
             if value in self.glossary:
@@ -253,10 +253,9 @@ class pyDMNrules():
                     self.decisionTables[table]['hitPolicy'] = hitPolicy
                     border = ws.cell(row=startRow + rows, column=startCol + cols).border
                     if border.bottom.style != 'double':
-                        doingValidity = True
-                    border = ws.cell(row=startRow + rows + 1, column=startCol + cols).border
-                    if border.top.style != 'double':
-                        doingValidity = True
+                        border = ws.cell(row=startRow + rows + 1, column=startCol + cols).border
+                        if border.top.style != 'double':
+                            doingValidity = True
                     doingInputs = True
                     cols += 1
                     continue
@@ -284,6 +283,9 @@ class pyDMNrules():
                     self.decisionTables[table]['outputColumns'][thisCol]['name'] = thisCell
                 cols += 1
                 continue
+            if doingInputs:
+                self.errors.append("No Output column in table '{!s}' - missing double bar vertical border".format(table))
+                return (rows, cols, -1)
             rows += 1
             if doingValidity:
                 # Parse the validity row
@@ -426,7 +428,7 @@ class pyDMNrules():
                     continue
                 rows += 1
             return (rows, cols, len(self.rules[table]))
-        elif cell.offset(row=1, column=1).value not in self.glossary:
+        elif cell.offset(row=2).value in self.glossary:
             # Rules as columns
             rows += 1
             # Search for the end of the table
@@ -450,13 +452,10 @@ class pyDMNrules():
                             self.errors.append("Invalid hit policy '{!s}' for table '{!s}'".format(hitPolicy, table))
                             return (rows, cols, -1)
                     self.decisionTables[table]['hitPolicy'] = hitPolicy
-                    border = ws.cell(row=thisRow, column=startCol + 1).border
-                    if border.right.style == 'double':
-                        doingValidity = True
-                        cols += 1
-                    else:
-                        border = ws.cell(row=thisRow, column=startCol + 2).border
-                        if border.left.style == 'double':
+                    border = ws.cell(row=thisRow, column=startCol).border
+                    if border.right.style != 'double':
+                        border = ws.cell(row=thisRow, column=startCol + 1).border
+                        if border.left.style != 'double':
                             doingValidity = True
                             cols += 1
                 else:
@@ -499,6 +498,9 @@ class pyDMNrules():
                     self.decisionTables[table]['outputRows'][outRow]['name'] = thisCell
                 thisRow += 1
                 continue
+            if doingInputs:
+                self.errors.append("No Output row in table '{!s}' - missing double bar horizontal border".format(table))
+                return (rows, cols, -1)
             rulesCol = 1
             if doingValidity:
                 # Parse the validity row
@@ -646,8 +648,184 @@ class pyDMNrules():
             return (rows, cols, len(self.rules[table]))
         else:
             # Rules as crosstab
-            self.errors.append('Rules as crosstab not yet implemented')
-            return (rows, cols, -1)
+            # This is the output, and the only output
+            rows += 1
+            thisCell = cell.offset(row=1).value
+            outputVariable = str(thisCell).strip()
+            # This should be merged cell - need a row and a column of variables, plus another row and column of tests (as a minimum)
+            mergedCells = ws.merged_cells.ranges
+            for merged in mergedCells:
+                if cell.offset(row=1).coordinate in merged:
+                    width = merged.max_col - merged.min_col + 1
+                    height = merged.max_row - merged.min_row + 1
+                    break
+            else:
+                self.errors.append("Decision table '{!s}' - unknown type".format(table))
+                return (rows, cols, -1)
+            rows += height
+            cols += width
+
+            self.decisionTables[table]['hitPolicy'] = 'U'
+            self.decisionTables[table]['inputColumns'] = []
+            self.decisionTables[table]['inputRows'] = []
+            self.decisionTables[table]['output'] = {}
+            self.decisionTables[table]['output']['name'] = outputVariable
+
+            # Parse the horizontal heading
+            coordinate = cell.offset(row=1, column=width).coordinate
+            for merged in mergedCells:
+                if coordinate in merged:
+                    horizontalCols = merged.max_col - merged.min_col + 1
+                    break
+            else:
+                horizontalCols = 1
+
+            heading = cell.offset(row=1, column=width).value
+            if heading.find(',') != -1:
+                inputs = heading.split(',')
+            else:
+                inputs = [heading]
+            if len(inputs) < height - 1:
+                self.errors.append("Crosstab Decision table '{!s}' is missing one or more rows of horizontal values".format(table))
+                return (rows, cols, -1)
+            elif len(inputs) > height - 1:
+                self.errors.append("Crosstab Decision table '{!s}' has too many rows of horizontal values".format(table))
+                return (rows, cols, -1)
+
+            thisVariable = 0
+            while thisVariable < height - 1:
+                thisCol = 0
+                lastTest = {}
+                while thisCol < horizontalCols:
+                    if thisVariable == 0:
+                        self.decisionTables[table]['inputColumns'].append({})
+                        self.decisionTables[table]['inputColumns'][thisCol]['tests'] = []
+
+                    thisCell = ws.cell(row=startRow + 2 + thisVariable, column=startCol + cols + thisCol).value
+                    coordinate = ws.cell(row=startRow + 2 + thisVariable, column=startCol + cols + thisCol).coordinate
+                    if thisCell is not None:
+                        thisCell = str(thisCell).strip()
+                        if thisCell == '-':
+                            if thisVariable in lastTest:
+                                lastTest[thisVariable]['name'] = '.'
+                            thisCol += 1
+                            continue
+                        name = inputs[thisVariable].strip()
+                        variable = self.glossary[name]['item']
+                        test = self.test2sfeel(variable, coordinate, thisCell)
+                        lastTest[thisVariable] = {}
+                        lastTest[thisVariable]['name'] = name
+                        lastTest[thisVariable]['variable'] = variable
+                        lastTest[thisVariable]['test'] = test
+                        lastTest[thisVariable]['thisCell'] = thisCell
+                    elif thisVariable in lastTest:
+                        name = lastTest[thisVariable]['name']
+                        if name == '.':
+                            thisCol += 1
+                            continue
+                        variable = lastTest[thisVariable]['variable']
+                        test = lastTest[thisVariable]['test']
+                        thisCell = lastTest[thisVariable]['thisCell']
+                    else:
+                        self.errors.append('Missing input test at {!s}'.format(coordinate))
+                        thisCol += 1
+                        continue
+                    # print("Setting test at '{!s}' to '{!s}'".format(coordinate, test))
+                    self.decisionTables[table]['inputColumns'][thisCol]['tests'].append((name, test))
+                    thisCol += 1
+                thisVariable += 1
+
+            # Parse the vertical heading
+            coordinate = cell.offset(row=1 + height).coordinate
+            for merged in mergedCells:
+                if coordinate in merged:
+                    verticalRows = merged.max_row - merged.min_row + 1
+                    break
+            else:
+                verticalRows = 1
+
+            heading = cell.offset(row=1 + height).value
+            if heading.find(',') != -1:
+                inputs = heading.split(',')
+            else:
+                inputs = [heading]
+            if len(inputs) < width - 1:
+                self.errors.append("Crosstab Decision table '{!s}' is missing one or more columns of verticals".format(table))
+                return (rows, cols, -1)
+            elif len(inputs) > width - 1:
+                self.errors.append("Crosstab Decision table '{!s}' has too many columns of vertical values".format(table))
+                return (rows, cols, -1)
+
+            thisVariable = 0
+            while thisVariable < width - 1:
+                thisRow = 0
+                lastTest = {}
+                while thisRow < verticalRows:
+                    if thisVariable == 0:
+                        self.decisionTables[table]['inputRows'].append({})
+                        self.decisionTables[table]['inputRows'][thisRow]['tests'] = []
+
+                    thisCell = ws.cell(row=startRow + 1 + height + thisRow, column=startCol + 1 + thisVariable).value
+                    coordinate = ws.cell(row=startRow + 1 + height + thisRow, column=startCol + 1 + thisVariable).coordinate
+                    if thisCell is not None:
+                        thisCell = str(thisCell).strip()
+                        if thisCell == '-':
+                            if thisVariable in lastTest:
+                                lastTest[thisVariable]['name'] = '.'
+                            thisRow += 1
+                            continue
+                        name = inputs[thisVariable].strip()
+                        variable = self.glossary[name]['item']
+                        test = self.test2sfeel(variable, coordinate, thisCell)
+                        lastTest[thisVariable] = {}
+                        lastTest[thisVariable]['name'] = name
+                        lastTest[thisVariable]['variable'] = variable
+                        lastTest[thisVariable]['test'] = test
+                        lastTest[thisVariable]['thisCell'] = thisCell
+                    elif thisVariable in lastTest:
+                        name = lastTest[thisVariable]['name']
+                        if name == '.':
+                            thisRow += 1
+                            continue
+                        variable = lastTest[thisVariable]['variable']
+                        test = lastTest[thisVariable]['test']
+                        thisCell = lastTest[thisVariable]['thisCell']
+                    else:
+                        self.errors.append('Missing input test at {!s}'.format(coordinate))
+                        thisRow += 1
+                        continue
+                    # print("Setting test at '{!s}' to '{!s}'".format(coordinate, test))
+                    self.decisionTables[table]['inputRows'][thisRow]['tests'].append((name, test))
+                    thisRow += 1
+                thisVariable += 1
+
+            # Now build the Rules
+            thisRule = 0
+            for row in range(verticalRows):
+                for col in range(horizontalCols):
+                    self.rules[table].append({})
+                    self.rules[table][thisRule]['ruleId'] = thisRule + 1
+                    self.rules[table][thisRule]['tests'] = []
+                    self.rules[table][thisRule]['outputs'] = []
+                    self.rules[table][thisRule]['tests'] += self.decisionTables[table]['inputColumns'][col]['tests']
+                    self.rules[table][thisRule]['tests'] += self.decisionTables[table]['inputRows'][row]['tests']
+                    thisCell = ws.cell(row=startRow + rows + row, column=startCol + cols + col).value
+                    coordinate = ws.cell(row=startRow + rows + row, column=startCol + cols + col).coordinate
+                    if thisCell is None:
+                        self.errors.append('Missing output result at {!s}'.format(coordinate))
+                        return (rows, cols, -1)
+                    thisCell = str(thisCell).strip()
+                    coordinate = ws.cell(row=startRow + rows + row, column=startCol + cols + col).coordinate
+                    name = self.decisionTables[table]['output']['name']
+                    variable = self.glossary[name]['item']
+                    result = self.result2sfeel(variable, coordinate, thisCell)
+                    # print("Setting result at '{!s}' to '{!s}'".format(coordinate, result))
+                    self.rules[table][thisRule]['outputs'].append((name, result, 0))
+                    thisRule += 1
+            rows += verticalRows
+            cols += horizontalCols
+
+            return (rows, cols, len(self.rules[table]))
 
 
     def load(self, rulesBook):
@@ -911,7 +1089,10 @@ class pyDMNrules():
     def decide(self, data):
         if not self.isLoaded:
             self.errors.append('No rulesBook has been loaded')
-            sys.exit(0)
+            status = {}
+            status['errors'] = self.errors
+            self.errors = []
+            return (status, {})
         self.errors = []
         self.warnings = []
         self.initGlossary()
@@ -919,7 +1100,10 @@ class pyDMNrules():
         for variable in data:
             if variable not in self.glossary:
                 self.errors.append('variable ({!s}) not in Glossary'.format(variable))
-                return False
+                status = {}
+                status['errors'] = self.errors
+                self.errors = []
+                return (status, {})
             item = self.glossary[variable]['item']
             value = data[variable]
             value = self.value2sfeel(value)
@@ -930,10 +1114,9 @@ class pyDMNrules():
                 retVal = self.sfeel('{} <- {}'.format(item, value))
         if not validData:
             status = {}
-            if len(self.errors) > 0:
-                status['errors'] = self.errors
-                self.errors = []
-            return (status, None)
+            status['errors'] = self.errors
+            self.errors = []
+            return (status, {})
 
         # Process each decision table in order
         newData = {}
@@ -992,6 +1175,10 @@ class pyDMNrules():
             if self.decisionTables[table]['hitPolicy'] in ['U', 'A', 'F']:
                 if foundRule is None:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
+                    status = {}
+                    status['errors'] = self.errors
+                    self.errors = []
+                    return (status, {})
                 else:
                     for (variable, result, rank) in self.rules[table][foundRule]['outputs']:
                         item = self.glossary[variable]['item']
@@ -1001,17 +1188,24 @@ class pyDMNrules():
             elif self.decisionTables[table]['hitPolicy'][0] in ['R', 'C']:
                 if len(rankedRules) == 0:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
+                    status = {}
+                    status['errors'] = self.errors
+                    self.errors = []
+                    return (status, {})
                 else:
                     foundRule = rankedRules[0]
+                    first = True
                     for (variable, result, rank) in self.rules[table][foundRule]['outputs']:
                         item = self.glossary[variable]['item']
-                        if variable not in newData:
-                            if len(self.decisionTables[table]['hitPolicy']) == 1:
-                                newData[variable] = []
-                            elif self.decisionTables[table]['hitPolicy'][1] in ['+', '#']:
-                                newData[variable] = 0
-                            else:
-                                newData[item] = None
+                        if first:
+                            if variable not in newData:
+                                if len(self.decisionTables[table]['hitPolicy']) == 1:
+                                    newData[variable] = []
+                                elif self.decisionTables[table]['hitPolicy'][1] in ['+', '#']:
+                                    newData[variable] = 0
+                                else:
+                                    newData[item] = None
+                            first = False
                         retVal = self.sfeel('{} <- {}'.format(item, result))
                         thisOutput = self.sfeel('{}'.format(item))
                         if len(self.decisionTables[table]['hitPolicy']) == 1:
@@ -1034,6 +1228,10 @@ class pyDMNrules():
             elif self.decisionTables[table]['hitPolicy'][0] == 'P':
                 if len(ranks) == 0:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
+                    status = {}
+                    status['errors'] = self.errors
+                    self.errors = []
+                    return (status, {})
                 else:
                     foundRule = ranks[0][-1]
                     for (variable, result, rank) in self.rules[table][foundRule]['outputs']:
@@ -1044,6 +1242,10 @@ class pyDMNrules():
             elif self.decisionTables[table]['hitPolicy'][0] == 'O':
                 if len(ranks) == 0:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
+                    status = {}
+                    status['errors'] = self.errors
+                    self.errors = []
+                    return (status, {})
                 else:
                     for i in range(len(ranks)):
                         foundRule = ranks[i][-1]
@@ -1066,11 +1268,11 @@ class pyDMNrules():
 if __name__ == '__main__':
 
     dmnRules = pyDMNrules()
-    data = {}
-    '''
     status = dmnRules.load('Example1.xlsx')
     if 'errors' in status:
         print('With errors', status['errors'])
+
+    data = {}
     data['Applicant Age'] = 63
     data['Medical History'] = 'bad'
     print('Testing',repr(data))
@@ -1078,6 +1280,7 @@ if __name__ == '__main__':
     print('Decision',repr(newData))
     if 'errors' in status:
         print('With errors', status['errors'])
+
     data['Applicant Age'] = 33
     data['Medical History'] = None
     print('Testing',repr(data))
@@ -1085,6 +1288,7 @@ if __name__ == '__main__':
     print('Decision',repr(newData))
     if 'errors' in status:
         print('With errors', status['errors'])
+
     data['Applicant Age'] = 13
     data['Medical History'] = 'good'
     print('Testing',repr(data))
@@ -1092,20 +1296,23 @@ if __name__ == '__main__':
     print('Decision',repr(newData))
     if 'errors' in status:
         print('With errors', status['errors'])
+
     data['Applicant Age'] = 13
-    data['Medical History'] = 'unknown'
+    data['Medical History'] = 'bad'
     print('Testing',repr(data))
     (status, newData) = dmnRules.decide(data)
     print('Decision',repr(newData))
     if 'errors' in status:
         print('With errors', status['errors'])
-    '''
+
     status = dmnRules.load('ExampleRows.xlsx')
     if 'errors' in status:
         print('With errors', status['errors'])
-    data['Customer'] = 'Business'
+
+    data = {}
+    data['Customer'] = 'Private'
     data['OrderSize'] = 9
-    data['Delivery'] = 'sameday'
+    data['Delivery'] = 'slow'
     print('Testing',repr(data))
     (status, newData) = dmnRules.decide(data)
     print('Decision',repr(newData))
@@ -1115,13 +1322,28 @@ if __name__ == '__main__':
     status = dmnRules.load('ExampleColumns.xlsx')
     if 'errors' in status:
         print('With errors', status['errors'])
-    data['Customer'] = 'Business'
+
+    data = {}
+    data['Customer'] = 'Private'
     data['OrderSize'] = 9
-    data['Delivery'] = 'sameday'
+    data['Delivery'] = 'slow'
     print('Testing',repr(data))
     (status, newData) = dmnRules.decide(data)
     print('Decision',repr(newData))
     if 'errors' in status:
         print('With errors', status['errors'])
 
+    status = dmnRules.load('ExampleCrosstab.xlsx')
+    if 'errors' in status:
+        print('With errors', status['errors'])
+        sys.exit(0)
 
+    data = {}
+    data['Customer'] = 'Private'
+    data['OrderSize'] = 9
+    data['Delivery'] = 'slow'
+    print('Testing',repr(data))
+    (status, newData) = dmnRules.decide(data)
+    print('Decision',repr(newData))
+    if 'errors' in status:
+        print('With errors', status['errors'])
