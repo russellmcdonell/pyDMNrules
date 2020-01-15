@@ -1,5 +1,5 @@
 # pyDMNrules
-An implementation DMN (Decision Model Notation) in Python, using the pySFeel and openxlrd modules.
+An implementation DMN (Decision Model Notation) in Python, using the [pySFeel](https://github.com/russellmcdonell/pySFeel) and openxlrd modules.
 
 DMN rules are read from an Excel workbook.
 Then data, matching the input variables in the DMN rules is passed to the decide() function.
