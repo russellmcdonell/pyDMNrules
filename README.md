@@ -30,8 +30,8 @@ The row contain a description and the name of a DMN rules table. pyDMNrules will
 | Decision           |                        |
 |--------------------|------------------------|
 | Decisions          | Execute Decision Table |
+|--------------------|------------------------|
 | Determine Discount | Discount               |
-| Discount           | Discount               |
 
 USAGE:
 
