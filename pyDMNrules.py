@@ -9,7 +9,7 @@ import pySFeel
 from openpyxl import load_workbook
 from openpyxl import utils
 
-class pyDMNrules():
+class DMN():
 
 
     def __init__(self):
@@ -29,6 +29,9 @@ class pyDMNrules():
 
 
     def data2sfeel(self, coordinate, data):
+        if data in self.glossary:
+            return self.glossary[data]['item']
+
         isError = False
         tokens = self.lexer.tokenize(data)
         yaccTokens = []
@@ -168,20 +171,20 @@ class pyDMNrules():
     def value2sfeel(self, value):
         if value is None:
             return 'null'
-        elif isinstance(value, str):
-            if value in self.glossary:
-                return value
-            else:
-                return '"' + value + '"'
-        elif isinstance(value, int):
-            return str(value)
-        elif isinstance(value, float):
-            return str(value)
         elif isinstance(value, bool):
             if value:
                 return 'true'
             else:
                 return 'false'
+        elif isinstance(value, float):
+            return str(value)
+        elif isinstance(value, int):
+            return str(value)
+        elif isinstance(value, str):
+            if value in self.glossary:
+                return value
+            else:
+                return '"' + value + '"'
         elif isinstance(value, datetime.date):
             return value.isoformat()
         elif isinstance(value, datetime.datetime):
@@ -212,38 +215,73 @@ class pyDMNrules():
         return thisResult
 
 
-    def parseDecionTable(self, ws, cell):
+    def tableSize(self, cell):
+        '''
+        Determine the size of a table
+        '''
+        rows = 1
+        cols = 0
+        while cell.offset(row=rows).value is not None:
+            coordinate = cell.offset(row=rows).coordinate
+            for merged in self.mergedCells:
+                if coordinate in merged:
+                    rows += merged.max_row - merged.min_row + 1
+                    break
+            else:
+                rows += 1
+        while cell.offset(row=1, column=cols).value is not None:
+            coordinate = cell.offset(row=1, column=cols).coordinate
+            for merged in self.mergedCells:
+                if coordinate in merged:
+                    cols += merged.max_col - merged.min_col + 1
+                    break
+            else:
+                cols += 1
+        return (rows, cols)
+
+
+
+    def parseDecionTable(self, cell):
         '''
         Parse a Decision Table
         '''
-        rows = cols = 0
+        (rows, cols) = self.tableSize(cell)
         startRow = cell.row
         startCol = cell.column
         table = cell.value
         coordinate = cell.coordinate
+        table = str(table).strip()
         # print("Parsing Decision Table '{!s}' at '{!s}'".format(table, coordinate))
         self.rules[table] = []
         # Check the next cell down to determine the decision table layout
-        if cell.offset(row=1).value is None:
+        thisCell = cell.offset(row=1).value
+        nextCell = cell.offset(row=2).value
+        if nextCell is not None:
+            nextCell = str(nextCell).strip()
+        if thisCell is None:
             # Empty table
             self.errors.append("Decision table '{!s}' at {!s}' is empty".format(table,coordinate))
             return (rows, cols, -1)
-        if cell.offset(row=1).value not in self.glossary:
+        thisCell = str(thisCell).strip()
+        if thisCell not in self.glossary:
+            # print('Rules as Rows')
             # Rules as rows
             # Parse the heading
-            rows += 1
-            inputColumns = 0
+            inputColumns = outputColumns = 0
             doingValidity = False
+            doingAnnotation = False
+            coordinate = cell.offset(row=1).coordinate
             self.decisionTables[table]['inputColumns'] = []
             self.decisionTables[table]['outputColumns'] = []
-            while ws.cell(row=startRow + rows, column=startCol + cols).value != None:
-                thisCell = ws.cell(row=startRow + rows, column=startCol + cols).value
-                if cols == 0:   # This should be the hit policy
+            for thisCol in range(cols):
+                thisCell = cell.offset(row=1, column=thisCol).value
+                if thisCol == 0:   # This should be the hit policy
                     if thisCell is None:
                         hitPolicy = 'U'
                     else:
+                        thisCell = str(thisCell).strip()
                         hitPolicy = thisCell
-                    if (not isinstance(hitPolicy, str)) or (hitPolicy[0] not in ['U', 'A', 'P', 'F', 'C', 'O', 'R']):
+                    if hitPolicy[0] not in ['U', 'A', 'P', 'F', 'C', 'O', 'R']:
                         self.errors.append("Invalid hit policy '{!s}' for table '{!s}'".format(hitPolicy, table))
                         return (rows, cols, -1)
                     if len(hitPolicy) != 1:
@@ -251,54 +289,75 @@ class pyDMNrules():
                             self.errors.append("Invalid hit policy '{!s}' for table '{!s}'".format(hitPolicy, table))
                             return (rows, cols, -1)
                     self.decisionTables[table]['hitPolicy'] = hitPolicy
-                    border = ws.cell(row=startRow + rows, column=startCol + cols).border
+                    border = cell.offset(row=1, column=thisCol).border
                     if border.bottom.style != 'double':
-                        border = ws.cell(row=startRow + rows + 1, column=startCol + cols).border
+                        border = cell.offset(row=2, column=thisCol).border
                         if border.top.style != 'double':
                             doingValidity = True
                     doingInputs = True
-                    cols += 1
                     continue
-                # Check that all the headings are in the Glossary
-                if thisCell not in self.glossary:
+                if thisCell is None:
                     if doingInputs:
-                        self.errors.append("Input heading '{!s}' in table '{!s}' is not in the Glossary".format(thisCell, table))
+                        self.errors.append("Missing Input heading in table '{!s}' at '{!s}'".format(table, coordinate))
+                    elif not doingAnnotation:
+                        self.errors.append("Missing Output heading in table '{!s}' at '{!s}'".format(table, coordinate))
                     else:
-                        self.errors.append("Output heading '{!s}' in table '{!s}' is not in the Glossary".format(thisCell, table))
+                        self.errors.append("Missing Annotation heading in table '{!s}' at '{!s}'".format(table, coordinate))
                     return (rows, cols, -1)
+                thisCell = str(thisCell).strip()
+                coordinate = cell.offset(row=1, column=thisCol).coordinate
+                if not doingAnnotation:
+                    # Check that all the headings are in the Glossary
+                    if thisCell not in self.glossary:
+                        if doingInputs:
+                            self.errors.append("Input heading '{!s}' in table '{!s}' at '{!s}' is not in the Glossary".format(thisCell, table, coordinate))
+                        elif not doingAnnotation:
+                            self.errors.append("Output heading '{!s}' in table '{!s}' at '{!s}' is not in the Glossary".format(thisCell, table, coordinate))
+                        else:
+                            self.errors.append("Annotation heading '{!s}' in table '{!s}' at '{!s}' is not in the Glossary".format(thisCell, table, coordinate))
+                        return (rows, cols, -1)
                 if doingInputs:
                     inputColumns += 1
-                    thisCol = len(self.decisionTables[table]['inputColumns'])
+                    thisInput = len(self.decisionTables[table]['inputColumns'])
                     self.decisionTables[table]['inputColumns'].append({})
-                    self.decisionTables[table]['inputColumns'][thisCol]['name'] = thisCell
-                    border = ws.cell(row=startRow + rows, column=startCol + cols).border
+                    self.decisionTables[table]['inputColumns'][thisInput]['name'] = thisCell
+                    border = cell.offset(row=1, column=thisCol).border
                     if border.right.style == 'double':
                         doingInputs = False
-                    border = ws.cell(row=startRow + rows, column=startCol + cols + 1).border
+                    border = cell.offset(row=1, column=thisCol + 1).border
                     if border.left.style == 'double':
                         doingInputs = False
-                else:
-                    thisCol = len(self.decisionTables[table]['outputColumns'])
+                elif not doingAnnotation:
+                    outputColumns += 1
+                    thisOutput = len(self.decisionTables[table]['outputColumns'])
                     self.decisionTables[table]['outputColumns'].append({})
-                    self.decisionTables[table]['outputColumns'][thisCol]['name'] = thisCell
-                cols += 1
-                continue
+                    self.decisionTables[table]['outputColumns'][thisOutput]['name'] = thisCell
+                    border = cell.offset(row=1, column=thisCol).border
+                    if border.right.style == 'double':
+                        doingAnnotation = True
+                    border = cell.offset(row=1, column=thisCol + 1).border
+                    if border.left.style == 'double':
+                        doingAnnotation = True
+                    if doingAnnotation:
+                        self.decisionTables[table]['annotation'] = []
+                else:
+                    self.decisionTables[table]['annotation'].append(thisCell)
+
             if doingInputs:
                 self.errors.append("No Output column in table '{!s}' - missing double bar vertical border".format(table))
                 return (rows, cols, -1)
-            rows += 1
+            rulesRow = 2
             if doingValidity:
                 # Parse the validity row
-                thisCol = 1
                 doingInputs = True
                 ranksFound = False
-                while thisCol < cols:
-                    thisCell = ws.cell(row=startRow + rows, column=startCol + thisCol).value
+                for thisCol in range(1, cols):
+                    thisCell = cell.offset(row=2, column=thisCol).value
                     if thisCell is None:
                         thisCol += 1
                         continue
                     ranksFound = True
-                    coordinate = ws.cell(row=startRow + rows, column=startCol + thisCol).coordinate
+                    coordinate = cell.offset(row=2, column=thisCol).coordinate
                     if thisCol <= inputColumns:
                         name = self.decisionTables[table]['inputColumns'][thisCol - 1]['name']
                         variable = self.glossary[name]['item']
@@ -313,7 +372,7 @@ class pyDMNrules():
                                     self.decisionTables[table]['inputColumns'][thisCol - 1]['validity'].append(float(thisTest))
                                 except:
                                     self.decisionTables[table]['inputColumns'][thisCol - 1]['validity'].append(thisTest)
-                    else:
+                    elif thisCol <= inputColumns + outputColumns:
                         name = self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['name']
                         variable = self.glossary[name]['item']
                         self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['validity'] = []
@@ -327,9 +386,10 @@ class pyDMNrules():
                                     self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['validity'].append(float(thisTest))
                                 except:
                                     self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['validity'].append(thisTest)
-                    thisCol += 1
+                    else:
+                        break
                 doingValidity = False
-                rows += 1
+                rulesRow += 1
                 if (not ranksFound) and (self.decisionTables[table]['hitPolicy'] in ['P', 'O']):
                     self.errors.append("Decision table '{!s}' has hit policy '{!s}' but there is no ordered list of output values".format(
                         table, self.decisionTables[table]['hitPolicy']))
@@ -340,26 +400,34 @@ class pyDMNrules():
                 return (rows, cols, -1)
             lastTest = lastResult = {}
             # Parse the rules
-            while ws.cell(row=startRow + rows, column=startCol).value != None:
+            for thisRow in range(rulesRow, rows):
                 thisCol = 0
                 thisRule = len(self.rules[table])
                 self.rules[table].append({})
                 self.rules[table][thisRule]['tests'] = []
                 self.rules[table][thisRule]['outputs'] = []
-                while thisCol < cols:
-                    thisCell = ws.cell(row=startRow + rows, column=startCol + thisCol).value
+                if doingAnnotation:
+                    self.rules[table][thisRule]['annotation'] = []
+                for thisCol in range(cols):
+                    thisCell = cell.offset(row=thisRow, column=thisCol).value
                     if thisCol == 0:
+                        thisCell = str(thisCell).strip()
                         self.rules[table][thisRule]['ruleId'] = thisCell
-                        thisCol += 1
                         continue
-                    coordinate = ws.cell(row=startRow + rows, column=startCol + thisCol).coordinate
+                    coordinate = cell.offset(row=thisRow, column=thisCol).coordinate
                     if thisCol <= inputColumns:
                         if thisCell is not None:
+                            for merged in self.mergedCells:
+                                if coordinate in merged:
+                                    mergeCount = merged.max_row - merged.min_row
+                                    break
+                            else:
+                                mergeCount = 0
                             thisCell = str(thisCell).strip()
                             if thisCell == '-':
-                                if thisCol in lastTest:
-                                    lastTest[thisCol]['name'] = '.'
-                                thisCol += 1
+                                lastTest[thisCol] = {}
+                                lastTest[thisCol]['name'] = '.'
+                                lastTest[thisCol]['mergeCount'] = mergeCount
                                 continue
                             name = self.decisionTables[table]['inputColumns'][thisCol - 1]['name']
                             variable = self.glossary[name]['item']
@@ -369,31 +437,35 @@ class pyDMNrules():
                             lastTest[thisCol]['variable'] = variable
                             lastTest[thisCol]['test'] = test
                             lastTest[thisCol]['thisCell'] = thisCell
-                        elif thisCol in lastTest:
+                            lastTest[thisCol]['mergeCount'] = mergeCount
+                        elif (thisCol in lastTest) and (lastTest[thisCol]['mergeCount'] > 0):
+                            lastTest[thisCol]['mergeCount'] -= 1
                             name = lastTest[thisCol]['name']
                             if name == '.':
-                                thisCol += 1
                                 continue
                             variable = lastTest[thisCol]['variable']
                             test = lastTest[thisCol]['test']
                             thisCell = lastTest[thisCol]['thisCell']
                         else:
-                            self.errors.append('Missing input test at {!s}'.format(coordinate))
-                            thisCol += 1
                             continue
                         if 'validity' in self.decisionTables[table]['inputColumns'][thisCol - 1]:
-                            thisValue = thisCell.strip()
                             try:
-                                thisCellValue = float(thisValue)
+                                thisValue = float(thisCell)
                             except:
-                                thisCellValue = thisValue
-                            if thisCellValue not in self.decisionTables[table]['inputColumns'][thisCol - 1]['validity']:
-                                self.errors.append("Input test '{!s}' at '{!s}' is not in the input valid list '{!s}'".format(
-                                    thisCellValue, coordinate, self.decisionTables[table]['inputColumns'][thisCol - 1]['validity']))
-                        # print("Setting test at '{!s}' to '{!s}'".format(coordinate, test))
+                                thisValue = thisCell
+                            if thisValue not in self.decisionTables[table]['inputColumns'][thisCol - 1]['validity']:
+                                self.errors.append("Input test '{!s}' at '{!s}' is not in the input valid list '{!r}'".format(
+                                    thisCell, coordinate, self.decisionTables[table]['inputColumns'][thisCol - 1]['validity']))
+                        # print("Setting test '{!s}' at '{!s}' to '{!s}'".format(name, coordinate, test))
                         self.rules[table][thisRule]['tests'].append((name, test))
-                    else:
+                    elif thisCol <= inputColumns + outputColumns:
                         if thisCell is not None:
+                            for merged in self.mergedCells:
+                                if coordinate in merged:
+                                    mergeCount = merged.max_row - merged.min_row
+                                    break
+                            else:
+                                mergeCount = 0
                             thisCell = str(thisCell).strip()
                             name = self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['name']
                             variable = self.glossary[name]['item']
@@ -402,47 +474,49 @@ class pyDMNrules():
                             lastResult[thisCol]['name'] = name
                             lastResult[thisCol]['variable'] = variable
                             lastResult[thisCol]['result'] = result
-                        elif thisCol in lastResult:
+                            lastResult[thisCol]['thisCell'] = thisCell
+                            lastResult[thisCol]['mergeCount'] = mergeCount
+                        elif (thisCol in lastResult) and (lastResult[thisCol]['mergeCount'] > 0):
+                            lastResult[thisCol]['mergeCount'] -= 1
                             name = lastResult[thisCol]['name']
                             variable = lastResult[thisCol]['variable']
                             result = lastResult[thisCol]['result']
+                            thisCell = lastResult[thisCol]['thisCell']
                         else:
                             self.errors.append('Missing output value at {!s}'.format(coordinate))
-                            thisCol += 1
                             continue
                         rank = None
                         if 'validity' in self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]:
-                            thisResult = thisCell.strip()
                             try:
-                                thisCellResult = float(thisResult)
+                                thisResult = float(thisCell)
                             except:
-                                thisCellResult = thisResult
-                            if thisCellResult not in self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['validity']:
-                                self.errors.append("Output value '{!s}' at '{!s}' is not in the output valid list '{!s}'".format(
-                                    thisCellResult, coordinate, self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['validity']))
+                                thisResult = thisCell
+                            if thisResult not in self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['validity']:
+                                self.errors.append("Output value '{!s}' at '{!s}' is not in the output valid list '{!r}'".format(
+                                    thisCell, coordinate, self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['validity']))
                             else:
-                                rank = self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['validity'].index(thisCellResult)
-                        # print("Setting result at '{!s}' to '{!s}'".format(coordinate, result))
+                                rank = self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['validity'].index(thisResult)
+                        # print("Setting result '{!s}' at '{!s}' to '{!s}' with rank '{!s}'".format(name, coordinate, result, rank))
                         self.rules[table][thisRule]['outputs'].append((name, result, rank))
-                    thisCol += 1
-                    continue
-                rows += 1
-            return (rows, cols, len(self.rules[table]))
-        elif cell.offset(row=2).value in self.glossary:
+                    else:
+                        self.rules[table][thisRule]['annotation'].append(thisCell)
+
+        # Check for Rules as Columns
+        elif (nextCell is not None) and (nextCell in self.glossary):
+            # print('Rules as Columns')
             # Rules as columns
-            rows += 1
-            # Search for the end of the table
-            while ws.cell(row=startRow + rows, column=startCol + cols).value != None:
-                rows += 1
             # Parse the footer
             doingValidity = False
-            thisRow = startRow + rows - 1
-            while ws.cell(row=thisRow, column=startCol + cols).value != None:
-                thisCell = ws.cell(row=thisRow, column=startCol + cols).value
-                if cols == 0:   # Should be hit policy
+            doingAnnotation = False
+            thisRow = rows - 1
+            thisCol = 0
+            for thisCol in range(cols):
+                thisCell = cell.offset(row=thisRow, column=thisCol).value
+                if thisCol == 0:   # Should be hit policy
                     if thisCell is None:
                         hitPolicy = 'U'
                     else:
+                        thisCell = str(thisCell).strip()
                         hitPolicy = thisCell
                     if (not isinstance(hitPolicy, str)) or (hitPolicy[0] not in ['U', 'A', 'P', 'F', 'C', 'O', 'R']):
                         self.errors.append("Invalid hit policy '{!s}' for table '{!s}'".format(hitPolicy, table))
@@ -452,69 +526,92 @@ class pyDMNrules():
                             self.errors.append("Invalid hit policy '{!s}' for table '{!s}'".format(hitPolicy, table))
                             return (rows, cols, -1)
                     self.decisionTables[table]['hitPolicy'] = hitPolicy
-                    border = ws.cell(row=thisRow, column=startCol).border
+                    border = cell.offset(row=thisRow).border
                     if border.right.style != 'double':
-                        border = ws.cell(row=thisRow, column=startCol + 1).border
+                        border = cell.offset(row=thisRow, column=1).border
                         if border.left.style != 'double':
                             doingValidity = True
-                            cols += 1
+                        thisCol += 1
                 else:
-                    thisCell = ws.cell(row=thisRow, column=startCol + cols).value
+                    thisCell = cell.offset(row=thisRow, column=thisCol).value
                     thisRule = len(self.rules[table])
                     self.rules[table].append({})
                     self.rules[table][thisRule]['tests'] = []
                     self.rules[table][thisRule]['outputs'] = []
-                    self.rules[table][thisRule]['ruleId'] = thisCell
-                cols += 1
+                    if thisCell is not None:
+                        thisCell = str(thisCell).strip()
+                        self.rules[table][thisRule]['ruleId'] = thisCell
+
             # Parse the heading
-            inputRows = 0
+            inputRows = outputRows = 0
             self.decisionTables[table]['inputRows'] = []
             self.decisionTables[table]['outputRows'] = []
             doingInputs = True
-            thisRow = startRow + 1
-            while thisRow < startRow + rows - 1:
-                thisCell = ws.cell(row=thisRow, column=startCol).value
-                # Check that all the headings are in the Glossary
-                if thisCell not in self.glossary:
+            for thisRow in range(1, rows - 1):
+                thisCell = cell.offset(row=thisRow).value
+                coordinate = cell.offset(row=thisRow).coordinate
+                if thisCell is None:
                     if doingOutputs:
-                        self.errors.append("Output heading '{!s}' in table '{!s}' is not in the Glossary".format(thisCell, table))
+                        self.errors.append("Missing Output heading in table '{!s}' at '{!s}'".format(table, coordinate))
+                    elif not doingAnnotation:
+                        self.errors.append("Missing Input heading in table '{!s}' at '{!s}'".format(table, coordinate))
                     else:
-                        self.errors.append("Input heading '{!s}' in table '{!s}' is not in the Glossary".format(thisCell, table))
+                        self.errors.append("Missing Annotation heading in table '{!s}' at '{!s}'".format(table, coordinate))
                     return (rows, cols, -1)
+                thisCell = str(thisCell).strip()
+                # Check that all the headings are in the Glossary
+                if not doingAnnotation:
+                    if thisCell not in self.glossary:
+                        if doingInputs:
+                            self.errors.append("Input heading '{!s}' in table '{!s}' at '{!s}' is not in the Glossary".format(thisCell, table, coordinate))
+                        else:
+                            self.errors.append("Output heading '{!s}' in table '{!s}' at '{!s}' is not in the Glossary".format(thisCell, table, coordinate))
+                        return (rows, cols, -1)
                 if doingInputs:
                     inputRows += 1
                     inRow = len(self.decisionTables[table]['inputRows'])
                     self.decisionTables[table]['inputRows'].append({})
                     self.decisionTables[table]['inputRows'][inRow]['name'] = thisCell
-                    border = ws.cell(row=thisRow, column=startCol).border
+                    border = cell.offset(row=thisRow).border
                     if border.bottom.style == 'double':
                         doingInputs = False
-                    border = ws.cell(row=thisRow + 1, column=startCol).border
+                    border = cell.offset(row=thisRow + 1).border
                     if border.top.style == 'double':
                         doingInputs = False
-                else:
+                elif not doingAnnotation:
+                    outputRows += 1
                     outRow = len(self.decisionTables[table]['outputRows'])
                     self.decisionTables[table]['outputRows'].append({})
                     self.decisionTables[table]['outputRows'][outRow]['name'] = thisCell
-                thisRow += 1
-                continue
+                    border = cell.offset(row=thisRow).border
+                    if border.bottom.style == 'double':
+                        doingAnnotation = True
+                    border = cell.offset(row=thisRow + 1).border
+                    if border.top.style == 'double':
+                        doingAnnotation = True
+                    if doingAnnotation:
+                        self.decisionTables[table]['annotation'] = []
+                else:
+                    self.decisionTables[table]['annotation'].append(thisCell)
+
             if doingInputs:
                 self.errors.append("No Output row in table '{!s}' - missing double bar horizontal border".format(table))
                 return (rows, cols, -1)
+
             rulesCol = 1
             if doingValidity:
-                # Parse the validity row
+                # Parse the validity column
                 outputRow = inputRow = 0
                 doingInputs = True
                 ranksFound = False
-                thisRow = startRow + 1
-                while thisRow < startRow + rows - 1:
-                    thisCell = ws.cell(row=thisRow, column=startCol + 1).value
+                for thisRow in range(1, rows - 1):
+                    thisCell = cell.offset(row=thisRow, column=1).value
                     if thisCell is None:
                         thisRow += 1
                         continue
+                    thisCell = str(thisCell).strip()
                     ranksFound = True
-                    coordinate = ws.cell(row=thisRow, column=startCol + 1).coordinate
+                    coordinate = cell.offset(row=thisRow, column=1).coordinate
                     if inputRow < inputRows:
                         name = self.decisionTables[table]['inputRows'][inputRow]['name']
                         variable = self.glossary[name]['item']
@@ -530,7 +627,7 @@ class pyDMNrules():
                                 except:
                                     self.decisionTables[table]['inputRows'][inputRow]['validity'].append(thisTest)
                         inputRow += 1
-                    else:
+                    elif outputRow < outputRows:
                         name = self.decisionTables[table]['outputRows'][outputRow]['name']
                         variable = self.glossary[name]['item']
                         self.decisionTables[table]['outputRows'][outputRow]['validity'] = []
@@ -545,10 +642,10 @@ class pyDMNrules():
                                 except:
                                     self.decisionTables[table]['outputRows'][outputRow]['validity'].append(thisTest)
                         outputRow += 1
-                    thisRow += 1
-                doingValidity = False
-                cols += 1
+                    else:
+                        break
                 rulesCol += 1
+                doingValidity = False
                 if (not ranksFound) and (self.decisionTables[table]['hitPolicy'] in ['P', 'O']):
                     self.errors.append("Decision table '{!s}' has hit policy '{!s}' but there is no ordered list of output values".format(
                         table, self.decisionTables[table]['hitPolicy']))
@@ -557,22 +654,30 @@ class pyDMNrules():
                 self.errors.append("Decision table '{!s}' has hit policy '{!s}' but there is no ordered list of output values".format(
                     table, self.decisionTables[table]['hitPolicy']))
                 return (rows, cols, -1)
+
             # Parse the rules
-            thisRow = startRow + 1
             outputRow = inputRow = 0
-            while thisRow < startRow + rows - 1:
+            for thisRow in range(1, rows - 1):
                 lastTest = lastResult = {}
-                thisCol = rulesCol
-                while thisCol < cols - 1:
+                for thisCol in range(rulesCol, cols):
                     thisRule = thisCol - rulesCol
-                    thisCell = ws.cell(row=thisRow, column=startCol + thisCol).value
-                    coordinate = ws.cell(row=thisRow, column=startCol + thisCol).coordinate
+                    if doingAnnotation and ('annotation' not in self.rules[table][thisRule]):
+                        self.rules[table][thisRule]['annotation'] = []
+                    thisCell = cell.offset(row=thisRow, column=thisCol).value
+                    coordinate = cell.offset(row=thisRow, column=thisCol).coordinate
                     if inputRow < inputRows:
                         if thisCell is not None:
+                            for merged in self.mergedCells:
+                                if coordinate in merged:
+                                    mergeCount = merged.max_col - merged.min_col
+                                    break
+                            else:
+                                mergeCount = 0
                             thisCell = str(thisCell).strip()
                             if thisCell == '-':
+                                lastTest = {}
                                 lastTest['name'] = '.'
-                                thisCol += 1
+                                lastTest['mergeCount'] = mergeCount
                                 continue
                             name = self.decisionTables[table]['inputRows'][inputRow]['name']
                             variable = self.glossary[name]['item']
@@ -582,31 +687,35 @@ class pyDMNrules():
                             lastTest['variable'] = variable
                             lastTest['test'] = test
                             lastTest['thisCell'] = thisCell
-                        elif 'name' in lastTest:
+                            lastTest['mergeCount'] = mergeCount
+                        elif ('mergeCount' in lastTest) and (lastTest['mergeCount'] > 0):
+                            lastTest['mergeCount'] -= 1
                             name = lastTest['name']
                             if name == '.':
-                                thisCol += 1
                                 continue
                             variable = lastTest['variable']
                             test = lastTest['test']
                             thisCell = lastTest['thisCell']
                         else:
-                            self.errors.append('Missing input test at {!s}'.format(coordinate))
-                            thisCol += 1
                             continue
                         if 'validity' in self.decisionTables[table]['inputRows'][inputRow]:
-                            thisValue = thisCell.strip()
                             try:
-                                thisCellValue = float(thisValue)
+                                thisValue = float(thisCell)
                             except:
-                                thisCellValue = thisValue
-                            if thisCellValue not in self.decisionTables[table]['inputRows'][inputRow]['validity']:
+                                thisValue = thisCell
+                            if thisValue not in self.decisionTables[table]['inputRows'][inputRow]['validity']:
                                 self.errors.append("Input test '{!s}' at '{!s}' is not in the input valid list '{!s}'".format(
-                                    thisCellValue, coordinate, self.decisionTables[table]['inputRows'][inputRow]['validity']))
-                        # print("Setting test at '{!s}' to '{!s}'".format(coordinate, test))
+                                    thisCell, coordinate, self.decisionTables[table]['inputRows'][inputRow]['validity']))
+                        # print("Setting test '{!s}' at '{!s}' to '{!s}'".format(name, coordinate, test))
                         self.rules[table][thisRule]['tests'].append((name, test))
-                    else:
+                    elif outputRow < outputRows:
                         if thisCell is not None:
+                            for merged in self.mergedCells:
+                                if coordinate in merged:
+                                    mergeCount = merged.max_col - merged.min_col
+                                    break
+                            else:
+                                mergeCount = 0
                             thisCell = str(thisCell).strip()
                             name = self.decisionTables[table]['outputRows'][outputRow]['name']
                             variable = self.glossary[name]['item']
@@ -615,55 +724,53 @@ class pyDMNrules():
                             lastResult['name'] = name
                             lastResult['variable'] = variable
                             lastResult['result'] = result
-                        elif 'name' in lastResult:
+                            lastResult['thisCell'] = thisCell
+                            lastResult['mergeCount'] = mergeCount
+                        elif ('mergeCount' in lastResult) and (lastResult['mergeCount'] > 0):
+                            lastResult['mergeCount'] -= 1
                             name = lastResult['name']
                             variable = lastResult['variable']
                             result = lastResult['result']
+                            thisCell = lastResult['thisCell']
                         else:
                             self.errors.append('Missing output value at {!s}'.format(coordinate))
                             outputRows += 1
-                            thisCol += 1
                             continue
                         rank = None
                         if 'validity' in self.decisionTables[table]['outputRows'][outputRow]:
-                            thisResult = thisCell.strip()
                             try:
-                                thisCellResult = float(thisResult)
+                                thisCellResult = float(thisCell)
                             except:
-                                thisCellResult = thisResult
+                                thisCellResult = thisCell
                             if thisCellResult not in self.decisionTables[table]['outputRows'][outputRow]['validity']:
                                 self.errors.append("Output value '{!s}' at '{!s}' is not in the output valid list '{!s}'".format(
-                                    thisCellResult, coordinate, self.decisionTables[table]['outputRows'][outputRow]['validity']))
+                                    thisCell, coordinate, self.decisionTables[table]['outputRows'][outputRow]['validity']))
                             else:
                                 rank = self.decisionTables[table]['outputRows'][outputRow]['validity'].index(thisCellResult)
-                        # print("Setting result at '{!s}' to '{!s}' with rank '{!s}'".format(coordinate, result, rank))
+                        # print("Setting result '{!s}' at '{!s}' to '{!s}' with rank '{!s}'".format(name, coordinate, result, rank))
                         self.rules[table][thisRule]['outputs'].append((name, result, rank))
-                    thisCol += 1
-                    continue
+                    else:
+                        self.rules[table][thisRule]['annotation'].append(thisCell)
                 if inputRow < inputRows:
                     inputRow += 1
                 else:
                     outputRow += 1
-                thisRow += 1
-            return (rows, cols, len(self.rules[table]))
         else:
             # Rules as crosstab
             # This is the output, and the only output
-            rows += 1
+            # print('Rules as Crosstab')
             thisCell = cell.offset(row=1).value
             outputVariable = str(thisCell).strip()
             # This should be merged cell - need a row and a column of variables, plus another row and column of tests (as a minimum)
-            mergedCells = ws.merged_cells.ranges
-            for merged in mergedCells:
-                if cell.offset(row=1).coordinate in merged:
+            coordinate = cell.offset(row=1).coordinate
+            for merged in self.mergedCells:
+                if coordinate in merged:
                     width = merged.max_col - merged.min_col + 1
                     height = merged.max_row - merged.min_row + 1
                     break
             else:
                 self.errors.append("Decision table '{!s}' - unknown type".format(table))
                 return (rows, cols, -1)
-            rows += height
-            cols += width
 
             self.decisionTables[table]['hitPolicy'] = 'U'
             self.decisionTables[table]['inputColumns'] = []
@@ -673,7 +780,7 @@ class pyDMNrules():
 
             # Parse the horizontal heading
             coordinate = cell.offset(row=1, column=width).coordinate
-            for merged in mergedCells:
+            for merged in self.mergedCells:
                 if coordinate in merged:
                     horizontalCols = merged.max_col - merged.min_col + 1
                     break
@@ -681,6 +788,10 @@ class pyDMNrules():
                 horizontalCols = 1
 
             heading = cell.offset(row=1, column=width).value
+            if heading is None:
+                self.errors.append("Crosstab Decision table '{!s}' is missing a horizontal heading".format(table))
+                return (rows, cols, -1)
+            heading = str(heading).strip()
             if heading.find(',') != -1:
                 inputs = heading.split(',')
             else:
@@ -692,23 +803,27 @@ class pyDMNrules():
                 self.errors.append("Crosstab Decision table '{!s}' has too many rows of horizontal values".format(table))
                 return (rows, cols, -1)
 
-            thisVariable = 0
-            while thisVariable < height - 1:
-                thisCol = 0
+            for thisVariable in range(height - 1):
                 lastTest = {}
-                while thisCol < horizontalCols:
+                for thisCol in range(horizontalCols):
                     if thisVariable == 0:
                         self.decisionTables[table]['inputColumns'].append({})
                         self.decisionTables[table]['inputColumns'][thisCol]['tests'] = []
 
-                    thisCell = ws.cell(row=startRow + 2 + thisVariable, column=startCol + cols + thisCol).value
-                    coordinate = ws.cell(row=startRow + 2 + thisVariable, column=startCol + cols + thisCol).coordinate
+                    thisCell = cell.offset(row=2 + thisVariable, column=width + thisCol).value
+                    coordinate = cell.offset(row=2 + thisVariable, column=width + thisCol).coordinate
                     if thisCell is not None:
+                        for merged in self.mergedCells:
+                            if coordinate in merged:
+                                mergeCount = merged.max_col - merged.min_col
+                                break
+                        else:
+                            mergeCount = 0
                         thisCell = str(thisCell).strip()
                         if thisCell == '-':
-                            if thisVariable in lastTest:
-                                lastTest[thisVariable]['name'] = '.'
-                            thisCol += 1
+                            lastTest[thisVariable] = {}
+                            lastTest[thisVariable]['name'] = '.'
+                            lastTest[thisVariable]['mergeCount'] = mergeCount
                             continue
                         name = inputs[thisVariable].strip()
                         variable = self.glossary[name]['item']
@@ -718,26 +833,24 @@ class pyDMNrules():
                         lastTest[thisVariable]['variable'] = variable
                         lastTest[thisVariable]['test'] = test
                         lastTest[thisVariable]['thisCell'] = thisCell
-                    elif thisVariable in lastTest:
+                        lastTest[thisVariable]['mergeCount'] = mergeCount
+                    elif (thisVariable in lastTest) and (lastTest[thisVariable]['mergeCount'] > 0):
+                        lastTest[thisVariable]['mergeCount'] -= 1
                         name = lastTest[thisVariable]['name']
                         if name == '.':
-                            thisCol += 1
                             continue
                         variable = lastTest[thisVariable]['variable']
                         test = lastTest[thisVariable]['test']
                         thisCell = lastTest[thisVariable]['thisCell']
                     else:
-                        self.errors.append('Missing input test at {!s}'.format(coordinate))
-                        thisCol += 1
+                        self.errors.append('Missing horizontal input test at {!s}'.format(coordinate))
                         continue
-                    # print("Setting test at '{!s}' to '{!s}'".format(coordinate, test))
+                    # print("Setting horizontal test '{!s}' at '{!s}' to '{!s}'".format(name, coordinate, test))
                     self.decisionTables[table]['inputColumns'][thisCol]['tests'].append((name, test))
-                    thisCol += 1
-                thisVariable += 1
 
             # Parse the vertical heading
             coordinate = cell.offset(row=1 + height).coordinate
-            for merged in mergedCells:
+            for merged in self.mergedCells:
                 if coordinate in merged:
                     verticalRows = merged.max_row - merged.min_row + 1
                     break
@@ -745,6 +858,10 @@ class pyDMNrules():
                 verticalRows = 1
 
             heading = cell.offset(row=1 + height).value
+            if heading is None:
+                self.errors.append("Crosstab Decision table '{!s}' is missing a vertical heading".format(table))
+                return (rows, cols, -1)
+            heading = str(heading).strip()
             if heading.find(',') != -1:
                 inputs = heading.split(',')
             else:
@@ -756,23 +873,27 @@ class pyDMNrules():
                 self.errors.append("Crosstab Decision table '{!s}' has too many columns of vertical values".format(table))
                 return (rows, cols, -1)
 
-            thisVariable = 0
-            while thisVariable < width - 1:
-                thisRow = 0
+            for thisVariable in range(width - 1):
                 lastTest = {}
-                while thisRow < verticalRows:
+                for thisRow in range(verticalRows):
                     if thisVariable == 0:
                         self.decisionTables[table]['inputRows'].append({})
                         self.decisionTables[table]['inputRows'][thisRow]['tests'] = []
 
-                    thisCell = ws.cell(row=startRow + 1 + height + thisRow, column=startCol + 1 + thisVariable).value
-                    coordinate = ws.cell(row=startRow + 1 + height + thisRow, column=startCol + 1 + thisVariable).coordinate
+                    thisCell = cell.offset(row=1 + height + thisRow, column=1 + thisVariable).value
+                    coordinate = cell.offset(row=1 + height + thisRow, column=1 + thisVariable).coordinate
                     if thisCell is not None:
+                        for merged in self.mergedCells:
+                            if coordinate in merged:
+                                mergeCount = merged.max_row - merged.min_row
+                                break
+                        else:
+                            mergeCount = 0
                         thisCell = str(thisCell).strip()
                         if thisCell == '-':
-                            if thisVariable in lastTest:
-                                lastTest[thisVariable]['name'] = '.'
-                            thisRow += 1
+                            lastTest[thisVariable] = {}
+                            lastTest[thisVariable]['name'] = '.'
+                            lastTest[thisVariable]['mergeCount'] = mergeCount
                             continue
                         name = inputs[thisVariable].strip()
                         variable = self.glossary[name]['item']
@@ -782,22 +903,20 @@ class pyDMNrules():
                         lastTest[thisVariable]['variable'] = variable
                         lastTest[thisVariable]['test'] = test
                         lastTest[thisVariable]['thisCell'] = thisCell
-                    elif thisVariable in lastTest:
+                        lastTest[thisVariable]['mergeCount'] = mergeCount
+                    elif (thisVariable in lastTest) and (lastTest[thisVariable]['mergeCount'] > 0):
+                        lastTest[thisVariable]['mergeCount'] -= 1
                         name = lastTest[thisVariable]['name']
                         if name == '.':
-                            thisRow += 1
                             continue
                         variable = lastTest[thisVariable]['variable']
                         test = lastTest[thisVariable]['test']
                         thisCell = lastTest[thisVariable]['thisCell']
                     else:
-                        self.errors.append('Missing input test at {!s}'.format(coordinate))
-                        thisRow += 1
+                        self.errors.append('Missing vertical input test at {!s}'.format(coordinate))
                         continue
-                    # print("Setting test at '{!s}' to '{!s}'".format(coordinate, test))
+                    # print("Setting veritical test '{!s}' at '{!s}' to '{!s}'".format(name, coordinate, test))
                     self.decisionTables[table]['inputRows'][thisRow]['tests'].append((name, test))
-                    thisRow += 1
-                thisVariable += 1
 
             # Now build the Rules
             thisRule = 0
@@ -809,23 +928,20 @@ class pyDMNrules():
                     self.rules[table][thisRule]['outputs'] = []
                     self.rules[table][thisRule]['tests'] += self.decisionTables[table]['inputColumns'][col]['tests']
                     self.rules[table][thisRule]['tests'] += self.decisionTables[table]['inputRows'][row]['tests']
-                    thisCell = ws.cell(row=startRow + rows + row, column=startCol + cols + col).value
-                    coordinate = ws.cell(row=startRow + rows + row, column=startCol + cols + col).coordinate
+                    thisCell = cell.offset(row=1 + height + row, column=width + col).value
+                    coordinate = cell.offset(row=1 + height + row, column=width + col).coordinate
                     if thisCell is None:
                         self.errors.append('Missing output result at {!s}'.format(coordinate))
                         return (rows, cols, -1)
                     thisCell = str(thisCell).strip()
-                    coordinate = ws.cell(row=startRow + rows + row, column=startCol + cols + col).coordinate
                     name = self.decisionTables[table]['output']['name']
                     variable = self.glossary[name]['item']
                     result = self.result2sfeel(variable, coordinate, thisCell)
                     # print("Setting result at '{!s}' to '{!s}'".format(coordinate, result))
                     self.rules[table][thisRule]['outputs'].append((name, result, 0))
                     thisRule += 1
-            rows += verticalRows
-            cols += horizontalCols
 
-            return (rows, cols, len(self.rules[table]))
+        return (rows, cols, len(self.rules[table]))
 
 
     def load(self, rulesBook):
@@ -849,7 +965,7 @@ class pyDMNrules():
             status = {}
             status['errors'] = self.errors
             return status
-        mergedCells = ws.merged_cells.ranges
+        self.mergedCells = ws.merged_cells.ranges
         inGlossary = False
         endGlossary = False
         glossaryColumn = None
@@ -861,8 +977,9 @@ class pyDMNrules():
                     thisCell = cell.value
                     if isinstance(thisCell, str):
                         if thisCell.startswith('Glossary'):
-                            for merged in mergedCells:
-                                if cell.coordinate in merged:
+                            coordinate = cell.coordinate
+                            for merged in self.mergedCells:
+                                if coordinate in merged:
                                     width = merged.max_col - merged.min_col
                                     if width != 2:
                                         self.errors.append('Invalid Glossary - not 3 columns wide')
@@ -961,7 +1078,7 @@ class pyDMNrules():
             status = {}
             status['errors'] = self.errors
             return status
-        mergedCells = ws.merged_cells.ranges
+        self.mergedCells = ws.merged_cells.ranges
         inDecision = False
         endDecision = False
         decisionColumn = None
@@ -974,8 +1091,9 @@ class pyDMNrules():
                     thisCell = cell.value
                     if isinstance(thisCell, str):
                         if thisCell.startswith('Decision'):
-                            for merged in mergedCells:
-                                if cell.coordinate in merged:
+                            coordinate = cell.coordinate
+                            for merged in self.mergedCells:
+                                if coordinate in merged:
                                     width = merged.max_col - merged.min_col
                                     if width != 1:
                                         self.errors.append('Invalid Decision - not 2 columns wide')
@@ -1036,6 +1154,7 @@ class pyDMNrules():
             if sheet in ['Glossary', 'Decision', 'Test']:
                 continue
             ws = self.wb[sheet]
+            self.mergedCells = ws.merged_cells.ranges
             parsedRanges = []
             for row in ws.rows:
                 thisRow = row[0].row
@@ -1047,7 +1166,7 @@ class pyDMNrules():
                     thisCell = cell.value
                     if isinstance(thisCell, str):
                         if thisCell in self.decisionTables:
-                            (rows, cols, rules) = self.parseDecionTable(ws, cell)
+                            (rows, cols, rules) = self.parseDecionTable(cell)
                             if rules == -1:
                                 status = {}
                                 if len(self.errors) > 0:
@@ -1062,8 +1181,7 @@ class pyDMNrules():
                             ws.merge_cells(start_row=thisRow, start_column=thisCol,
                                            end_row=thisRow + rows - 1, end_column=thisCol + cols - 1)
                             # Find this merge range
-                            mergedCells = ws.merged_cells.ranges
-                            for thisMerged in mergedCells:
+                            for thisMerged in self.mergedCells:
                                 if (thisMerged.min_col == cell.column) and (thisMerged.min_row == cell.row):
                                     if thisMerged.max_col != (cell.column + cols - 1):
                                         continue
@@ -1121,6 +1239,7 @@ class pyDMNrules():
         # Process each decision table in order
         newData = {}
         ruleIds = []
+        annotations = []
         for variable in self.glossary:
             item = self.glossary[variable]['item']
             newData[variable] = self.sfeel('{}'.format(item))
@@ -1184,7 +1303,12 @@ class pyDMNrules():
                         item = self.glossary[variable]['item']
                         retVal = self.sfeel('{} <- {}'.format(item, result))
                         newData[variable] = self.sfeel('{}'.format(item))
-                    ruleIds.append(table + ':' + str(self.rules[table][foundRule]['ruleId']))
+                    ruleIds.append((table, str(self.rules[table][foundRule]['ruleId'])))
+                    if 'annotation' in self.decisionTables[table]:
+                        for annotation in range(len(self.decisionTables[table]['annotation'])):
+                            name = self.decisionTables[table]['annotation'][annotation]
+                            text = self.rules[table][foundRule]['annotation'][annotation]
+                            annotations.append((name, text))
             elif self.decisionTables[table]['hitPolicy'][0] in ['R', 'C']:
                 if len(rankedRules) == 0:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
@@ -1224,7 +1348,12 @@ class pyDMNrules():
                                 newData[variable] = thisOutput
                         else:
                             newData[variable] += 1
-                    ruleIds.append(table + ':' + str(self.rules[table][foundRule]['ruleId']))
+                    ruleIds.append((table, str(self.rules[table][foundRule]['ruleId'])))
+                    if 'annotation' in self.decisionTables[table]:
+                        for annotation in range(len(self.decisionTables[table]['annotation'])):
+                            name = self.decisionTables[table]['annotation'][annotation]
+                            text = self.rules[table][foundRule]['annotation'][annotation]
+                            annotations.append((name, text))
             elif self.decisionTables[table]['hitPolicy'][0] == 'P':
                 if len(ranks) == 0:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
@@ -1238,7 +1367,12 @@ class pyDMNrules():
                         item = self.glossary[variable]['item']
                         retVal = self.sfeel('{} <- {}'.format(item, result))
                         newData[variable] = self.sfeel('{}'.format(item))
-                    ruleIds.append(table + ':' + str(self.rules[table][foundRule]['ruleId']))
+                    ruleIds.append((table, str(self.rules[table][foundRule]['ruleId'])))
+                    if 'annotation' in self.decisionTables[table]:
+                        for annotation in range(len(self.decisionTables[table]['annotation'])):
+                            name = self.decisionTables[table]['annotation'][annotation]
+                            text = self.rules[table][foundRule]['annotation'][annotation]
+                            annotations.append((name, text))
             elif self.decisionTables[table]['hitPolicy'][0] == 'O':
                 if len(ranks) == 0:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
@@ -1256,8 +1390,15 @@ class pyDMNrules():
                             retVal = self.sfeel('{} <- {}'.format(item, result))
                             newData[variable].append(self.sfeel('{}'.format(item)))
                         ruleIds.append(table + ':' + str(self.rules[table][foundRule]['ruleId']))
+                        if 'annotation' in self.decisionTables[table]:
+                            for annotation in range(len(self.decisionTables[table]['annotation'])):
+                                name = self.decisionTables[table]['annotation'][annotation]
+                                text = self.rules[table][foundRule]['annotation'][annotation]
+                                annotations.append((name, text))
 
         newData['Execute Rules'] = ruleIds
+        if len(annotations) > 0:
+            newData['Annotations'] = annotations
         status = {}
         if len(self.errors) > 0:
             status['errors'] = self.errors
@@ -1267,10 +1408,13 @@ class pyDMNrules():
 
 if __name__ == '__main__':
 
-    dmnRules = pyDMNrules()
+    dmnRules = DMN()
     status = dmnRules.load('Example1.xlsx')
     if 'errors' in status:
-        print('With errors', status['errors'])
+        print('Example1.xlsx has errors', status['errors'])
+        sys.exit(0)
+    else:
+        print('Example1.xlsx loaded')
 
     data = {}
     data['Applicant Age'] = 63
@@ -1307,7 +1451,10 @@ if __name__ == '__main__':
 
     status = dmnRules.load('ExampleRows.xlsx')
     if 'errors' in status:
-        print('With errors', status['errors'])
+        print('ExampleRows.xlsx has errors', status['errors'])
+        sys.exit(0)
+    else:
+        print('ExampleRows.xlsx loaded')
 
     data = {}
     data['Customer'] = 'Private'
@@ -1321,7 +1468,10 @@ if __name__ == '__main__':
 
     status = dmnRules.load('ExampleColumns.xlsx')
     if 'errors' in status:
-        print('With errors', status['errors'])
+        print('ExampleColumns.xlsx has errors', status['errors'])
+        sys.exit(0)
+    else:
+        print('ExampleColumns.xlsx loaded')
 
     data = {}
     data['Customer'] = 'Private'
@@ -1335,8 +1485,10 @@ if __name__ == '__main__':
 
     status = dmnRules.load('ExampleCrosstab.xlsx')
     if 'errors' in status:
-        print('With errors', status['errors'])
+        print('ExampleCrosstab.xlsx has errors', status['errors'])
         sys.exit(0)
+    else:
+        print('ExampleCrosstab.xlsx loaded')
 
     data = {}
     data['Customer'] = 'Private'
