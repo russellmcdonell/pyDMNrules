@@ -27,11 +27,10 @@ Items in the Glossary can be outputs of one decision table and inputs in the nex
 The 'Decision' tab must contain a table headed 'Decision' with the headings 'Decisions' and 'Execute Decision Table'.
 The row contain a description and the name of a DMN rules table. pyDMNrules will execute each decision table in this order.
 
-| Decision           |                        |
-|--------------------|------------------------|
-| Decisions          | Execute Decision Table |
-|--------------------|------------------------|
-| Determine Discount | Discount               |
+| Decision           |                            |
+|--------------------|----------------------------|
+| **Decisions**      | **Execute Decision Table** |
+| Determine Discount | Discount                   |
 
 USAGE:
 
