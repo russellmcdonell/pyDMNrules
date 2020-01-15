@@ -61,6 +61,4 @@ newData will contain all the items listed in the Glossary, with their final assi
     $ python3 HPV.py
     ExampleHPV.xlsx loaded
     Testing {'Participant Age': 36, 'In Test of Cure': True, 'Hysterectomy Flag': False, 'Cancer Flag': False, 'HPV-V': 'V0', 'Current Participant Risk Category': 'low'}
-    Decision {'Immune Deficient Flag': None, 'Hysterectomy Flag': False, 'Cancer Flag': False, 'In Test of Cure': True, 'Participant Age': 36.0, 'Current Participant Risk Category': 'low', 'HPV-V': 'V0', 'Cyto-S': None, 'Cyto-E': None, 'Cyto-O': None, 'Collection Method': None, 'Test Risk Code': 'L', 'New Participant Risk Category': 'low', 'Participant Care Pathway': '?', 'Next Rule': 'CervicalRisk2', 'Execute Rules': [('FirstTestOfCervicalRisk', '20')]}
-
-
+    Decision {'Immune Deficient Flag': None, 'Hysterectomy Flag': False, 'Cancer Flag': False, 'In Test of Cure': True, 'Participant Age': 36.0, 'Current Participant Risk Category': 'low', 'HPV-V': 'V0', 'Cyto-S': None, 'Cyto-E': None, 'Cyto-O': None, 'Collection Method': None, 'Test Risk Code': 'L', 'New Participant Risk Category': 'low', 'Participant Care Pathway': 'toBeDetermine', 'Next Rule': 'CervicalRisk2', 'Execute Rules': [('FirstTestOfCervicalRisk', '20')]}
