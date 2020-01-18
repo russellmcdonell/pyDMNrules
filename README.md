@@ -85,3 +85,14 @@ The returned list is a list of dictionaries, one for each test in the 'DMNrulesT
 # Note
 If an output should be the value of an input, then you can use the Variable from the Glossary. However, if the output is a manuipulation of an input, then you will need to use the internal name for that variable, being the Business Concept and the Attibute concateneted with the period character. That is 'Patient Age' is valid, but 'Patient Age + 5' is not. Instead you will need to use the syntax 'Patient.age + 5'
 
+
+# USAGE:
+
+    import pyDMNrules
+    dmnRules = pyDMNrules.DMN()
+    (testStatus, results) = dmnRules.test()
+    for test in range(len(results)):
+        if 'Mismatches' not in results[test]:
+            print('Test ID', results[test]['Test ID'], 'passed')
+        else:
+            print('Test ID', results[test]['Test ID'], 'failed')
