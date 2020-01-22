@@ -67,19 +67,42 @@ class DMN():
                 # In function
                 isIn = True
                 thisTest = tmp[1:-1]
+            elif thisTest[:3] == 'in ':
+                isIn = True
+                thisTest = thisTest[3:].strip()
+        inBits = thisTest.split(' in ')
+        if len(inBits) == 2:
+            bit1 = self.data2sfeel(coordinate, inBits[0])
+            bit2 = self.data2sfeel(coordinate, inBits[1])
+            if isNot:
+                return 'not ' + bit1 + ' in ' + bit2
+            else:
+                return bit1 + ' in ' + bit2
+
+        inIs = False
         if (thisTest[0] not in ['[', '(']) or (thisTest[-1] not in [']', ')']):
             # Not a list or range
+            if thisTest.endswith(' in'):
+                inIs = True
+                thisTest = thisTest[:-3].strip()
+            if thisTest.endswith(' not'):
+                thisTest = thisTest[:-4].strip()
+                if isNot:
+                    inNot = False
+                else:
+                    inNot = True
             commaAt = thisTest.find(',')
             if commaAt == -1:
                 # Not an list - should be an S-FEEL simple expression
                 # Could be a string constant, but missing surrounding double quotes
                 relOp = ''
-                if thisTest[:2] in ['<=', '>=', '!=']:
-                    relOp = thisTest[:2]
-                    thisTest = thisTest[2:]
-                elif thisTest[:1] in ['<', '>', '=']:
-                    relOp = thisTest[:1]
-                    thisTest = thisTest[1:]
+                if not inIs:
+                    if thisTest[:2] in ['<=', '>=', '!=']:
+                        relOp = thisTest[:2]
+                        thisTest = thisTest[2:]
+                    elif thisTest[:1] in ['<', '>', '=']:
+                        relOp = thisTest[:1]
+                        thisTest = thisTest[1:]
                 thisTest = self.data2sfeel(coordinate, thisTest)
                 if isNot:
                     if isIn:
@@ -87,9 +110,11 @@ class DMN():
                             return variable + ' not in(' + relOp + ' ' + thisTest + ')'
                         else:
                             return variable + ' not in(' + thisTest + ')'
+                    elif inIs:
+                            return thisTest + ' not in ' + variable
                     else:
                         if relOp != '':
-                            return variable + ' not ' +relOp + ' ' + thisTest
+                            return variable + ' not ' + relOp + ' ' + thisTest
                         else:
                             return variable + ' not ' + thisTest
                 else:
@@ -98,6 +123,8 @@ class DMN():
                             return variable + ' in(' + relOp + ' ' + thisTest + ')'
                         else:
                             return variable + ' in(' + thisTest + ')'
+                    elif inIs:
+                            return thisTest + ' in ' + variable
                     else:
                         if relOp != '':
                             return variable + ' ' + relOp + ' ' + thisTest
@@ -168,6 +195,33 @@ class DMN():
                         return variable + ' in ' + thisTest
 
 
+    def list2sfeel(self, value):
+        newValue = '['
+        for i in range(len(value)):
+            if newValue != '[':
+                newValue += ','
+            if isinstance(value[i], list):
+                newValue += self.list2sfeel(value[i])
+            elif isinstance(value[i], dict):
+                newValue += self.dict2sfeel(value[i])
+            else:
+                newValue += self.value2sfeel(value[i])
+        return newValue + ']'
+
+    def dict2sfeel(self, value):
+        newValue = '{'
+        for key in value:
+            if newValue != '{':
+                newValue += ','
+            newValue += '"' + key + '":'
+            if isinstance(value[key], list):
+                newValue += self.list2sfeel(value[key])
+            elif isinstance(value[key], dict):
+                newValue += self.dict2sfeel(value[key])
+            else:
+                newValue += self.value2sfeel(value[key])
+        return newValue + '}'
+
     def value2sfeel(self, value):
         if value is None:
             return 'null'
@@ -184,7 +238,11 @@ class DMN():
             if value in self.glossary:
                 return value
             else:
-                return '"' + value + '"'
+                return '"' + value.replace('"', r'\"') + '"'
+        elif isinstance(value, list):
+                return self.list2sfeel(value)
+        elif isinstance(value, dict):
+                return self.dict2sfeel(value)
         elif isinstance(value, datetime.date):
             return value.isoformat()
         elif isinstance(value, datetime.datetime):
@@ -289,6 +347,7 @@ class DMN():
             self.decisionTables[table]['outputColumns'] = []
             for thisCol in range(cols):
                 thisCell = cell.offset(row=1, column=thisCol).value
+                coordinate = cell.offset(row=1, column=thisCol).coordinate
                 if thisCol == 0:   # This should be the hit policy
                     if thisCell is None:
                         hitPolicy = 'U'
@@ -308,7 +367,10 @@ class DMN():
                         border = cell.offset(row=2, column=thisCol).border
                         if border.top.style != 'double':
                             doingValidity = True
-                    doingInputs = True
+                    if border.right.style == 'double':
+                        doingInputs = False
+                    else:
+                        doingInputs = True
                     continue
                 if thisCell is None:
                     if doingInputs:
@@ -319,7 +381,6 @@ class DMN():
                         self.errors.append("Missing Annotation heading in table '{!s}' at '{!s}'".format(table, coordinate))
                     return (rows, cols, -1)
                 thisCell = str(thisCell).strip()
-                coordinate = cell.offset(row=1, column=thisCol).coordinate
                 if not doingAnnotation:
                     # Check that all the headings are in the Glossary
                     if thisCell not in self.glossary:
@@ -783,7 +844,7 @@ class DMN():
                     height = merged.max_row - merged.min_row + 1
                     break
             else:
-                self.errors.append("Decision table '{!s}' - unknown type".format(table))
+                self.errors.append("Decision table '{!s}' - unknown DMN rules table type".format(table))
                 return (rows, cols, -1)
 
             self.decisionTables[table]['hitPolicy'] = 'U'
@@ -965,8 +1026,8 @@ class DMN():
         self.errors = []
         try:
             self.wb = load_workbook(filename=rulesBook)
-        except (utils.exceptions.InvalidFileException, IOError):
-            self.errors.append('No workbook named %s!', rulesBook)
+        except Exception as e:
+            self.errors.append("No readable workbook named '{!s}'!".format(rulesBook))
             status = {}
             status['errors'] = self.errors
             return status
@@ -1097,8 +1158,8 @@ class DMN():
                     if isinstance(thisCell, str):
                         if thisCell.startswith('Decision'):
                             (rows, cols) = self.tableSize(cell)
-                            if cols != 2:
-                                self.errors.append('Invalid Decision - not 2 columns wide')
+                            if cols < 2:
+                                self.errors.append('Invalid Decision - less than 2 columns wide')
                                 status = {}
                                 status['errors'] = self.errors
                                 return status
@@ -1114,31 +1175,102 @@ class DMN():
             status = {}
             status['errors'] = self.errors
             return status
-        thisCell = cell.offset(row=1).value
-        coordinate = cell.offset(row=1).coordinate
-        if thisCell != 'Decisions':
-            self.errors.append("Missing Decision heading at '{!s}'".format(coordinate))
-            print(cell.offset(row=1).value)
+        inputColumns = 0
+        inputVariables = []
+        doingInputs = True
+        for thisCol in range(cols):
+            thisCell = cell.offset(row=1, column=thisCol).value
+            coordinate = cell.offset(row=1, column=thisCol).coordinate
+            inputVariables.append(thisCell)
+            if doingInputs:
+                # Check that all the headings are in the Glossary
+                if thisCell == 'Decisions':
+                    doingInputs = False
+                    doingDecisions = True
+                    continue
+                if thisCell not in self.glossary:
+                    self.errors.append("Input heading '{!s}' in Decision table '{!s}' at '{!s}' is not in the Glossary".format(thisCell, table, coordinate))
+                    status = {}
+                    status['errors'] = self.errors
+                    return status
+                inputColumns += 1
+            elif doingDecisions:
+                if thisCell == 'Execute Decision Tables':
+                    doingDecisions = False
+                    doingAnnotations = True
+                else:
+                    self.errors.append("Bad Decision heading '{!s}' at '{!s}'".format(thisCell, coordinate))
+                    status = {}
+                    status['errors'] = self.errors
+                    return status
+        if doingInputs:
+            self.errors.append("Missing heading 'Decisions' in Decision table")
             status = {}
             status['errors'] = self.errors
             return status
-        thisCell = cell.offset(row=1, column=1).value
-        coordinate = cell.offset(row=1, column=1).coordinate
-        if thisCell != 'Execute Decision Tables':
-            self.errors.append("Bad Decision heading '{!s}' at '{!s}'".format(thisCell, coordinate))
+        if doingDecisions:
+            self.errors.append("Missing heading 'Execute Decision Table' in Decision table")
             status = {}
             status['errors'] = self.errors
             return status
+        lastTest = {}
         for thisRow in range(2, rows):
-            decision = cell.offset(row=thisRow).value
-            table = cell.offset(row=thisRow, column=1).value
-            if table in self.decisionTables:
-                self.errors.append('Execution Decision Table ({!s}) repeated in Decision'.format(table))
-                status = {}
-                status['errors'] = self.errors
-                return status
+            inputTests = []
+            annotations = []
+            for thisCol in range(cols):
+                thisCell = cell.offset(row=thisRow, column=thisCol).value
+                coordinate = cell.offset(row=thisRow, column=thisCol).coordinate
+                if thisCol < inputColumns:
+                    if thisCell is not None:
+                        for merged in self.mergedCells:
+                            if coordinate in merged:
+                                mergeCount = merged.max_row - merged.min_row
+                                break
+                        else:
+                            mergeCount = 0
+                        thisCell = str(thisCell).strip()
+                        if thisCell == '-':
+                            lastTest[thisCol] = {}
+                            lastTest[thisCol]['name'] = '.'
+                            lastTest[thisCol]['mergeCount'] = mergeCount
+                            continue
+                        name = inputVariables[thisCol]
+                        variable = self.glossary[name]['item']
+                        test = self.test2sfeel(variable, coordinate, thisCell)
+                        lastTest[thisCol] = {}
+                        lastTest[thisCol]['name'] = name
+                        lastTest[thisCol]['variable'] = variable
+                        lastTest[thisCol]['test'] = test
+                        lastTest[thisCol]['thisCell'] = thisCell
+                        lastTest[thisCol]['mergeCount'] = mergeCount
+                    elif (thisCol in lastTest) and (lastTest[thisCol]['mergeCount'] > 0):
+                        lastTest[thisCol]['mergeCount'] -= 1
+                        name = lastTest[thisCol]['name']
+                        if name == '.':
+                            continue
+                        variable = lastTest[thisCol]['variable']
+                        test = lastTest[thisCol]['test']
+                        thisCell = lastTest[thisCol]['thisCell']
+                    else:
+                        continue
+                    inputTests.append((name, test))
+                elif thisCol == inputColumns:
+                    decision = cell.offset(row=thisRow, column=thisCol).value
+                elif thisCol == inputColumns + 1:
+                    table = cell.offset(row=thisRow, column=thisCol).value
+                    coordinate = cell.offset(row=1, column=thisCol).coordinate
+                    if table in self.decisionTables:
+                        self.errors.append("Execution Decision Table '{!s}' repeated in Decision table at '{!s}'".format(table, coordinate))
+                        status = {}
+                        status['errors'] = self.errors
+                        return status
+                else:
+                    name = inputVariables[thisCol]
+                    annotations.append((name, thisCell))
+
             self.decisionTables[table] = {}
-            self.decisions.append((decision, table))
+            self.decisionTables[table]['name'] = decision
+            self.decisions.append((table, inputTests, annotations))
 
         # Now search for the Decision Tables
         self.rules = {}
@@ -1164,7 +1296,10 @@ class DMN():
                                     status['errors'] = self.errors
                                 return status
                             elif rules == 0:
-                                print("Decision table '{!s}' has no rules".format(thisCell))
+                                self.errors.append("Decision table '{!s}' has no rules".format(thisCell))
+                                status = {}
+                                status['errors'] = self.errors
+                                return status
                                 continue
                             # Symbolically merge all the cells in this table
                             thisRow = cell.row
@@ -1223,7 +1358,7 @@ class DMN():
             if value is None:
                 validData = False
             else:
-                # print('Setting variable ({!s}) [item ({!s})] to value ({!s})'.format(variable, item, value))
+                # print('Setting Variable ({!s}) [item ({!s})] to value ({!s})'.format(variable, item, value))
                 retVal = self.sfeel('{} <- {}'.format(item, value))
         if not validData:
             status = {}
@@ -1232,18 +1367,21 @@ class DMN():
             return (status, {})
 
         # Process each decision table in order
-        newData = {}
-        newData['Result'] = {}
-        ruleIds = []
-        annotations = []
-        for variable in self.glossary:
-            item = self.glossary[variable]['item']
-            thisResult = self.sfeel('{}'.format(item))
-            if isinstance(thisResult, str):
-                if (thisResult[0] == '"') and (thisResult[-1] == '"'):
-                    thisResult = thisResult[1:-1]
-            newData['Result'][variable] = thisResult
-        for table in self.decisionTables:
+        allResults = []
+        for (table, inputTests, decisionAnnotations) in self.decisions:
+            if len(inputTests) > 0:
+                doDecision = True
+                for (variable, test) in inputTests:
+                    item = self.glossary[variable]['item']
+                    itemValue = self.sfeel('{}'.format(item))
+                    retVal = self.sfeel('{}'.format(test))
+                    # print("Decision Variable '{!s}' [data '{!s}'] with test '{!s}' returned '{!s}'".format(variable, itemValue, test, retVal))
+                    if not retVal:
+                        doDecision = False
+                        break
+                if not doDecision:
+                    continue
+                
             ranks = []
             foundRule = None
             rankedRules = []
@@ -1291,6 +1429,16 @@ class DMN():
                                 ranks.append(theseRanks)
                             else:
                                 ranks.insert(i, theseRanks)
+            newData = {}
+            newData['Result'] = {}
+            annotations = []
+            for variable in self.glossary:
+                item = self.glossary[variable]['item']
+                thisResult = self.sfeel('{}'.format(item))
+                if isinstance(thisResult, str):
+                    if (thisResult[0] == '"') and (thisResult[-1] == '"'):
+                        thisResult = thisResult[1:-1]
+                newData['Result'][variable] = thisResult
             if self.decisionTables[table]['hitPolicy'] in ['U', 'A', 'F']:
                 if foundRule is None:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
@@ -1307,12 +1455,17 @@ class DMN():
                             if (thisResult[0] == '"') and (thisResult[-1] == '"'):
                                 thisResult = thisResult[1:-1]
                         newData['Result'][variable] = thisResult
-                    ruleIds.append((table, str(self.rules[table][foundRule]['ruleId'])))
+                    ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
                     if 'annotation' in self.decisionTables[table]:
                         for annotation in range(len(self.decisionTables[table]['annotation'])):
                             name = self.decisionTables[table]['annotation'][annotation]
                             text = self.rules[table][foundRule]['annotation'][annotation]
                             annotations.append((name, text))
+                newData['Executed Rule'] = ruleId
+                if len(decisionAnnotations) > 0:
+                    newData['DecisionAnnotations'] = decisionAnnotations
+                if len(annotations) > 0:
+                    newData['RuleAnnotations'] = annotations
             elif self.decisionTables[table]['hitPolicy'][0] in ['R', 'C']:
                 if len(rankedRules) == 0:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
@@ -1355,12 +1508,17 @@ class DMN():
                                 newData['Result'][variable] = thisOutput
                         else:
                             newData['Result'][variable] += 1
-                    ruleIds.append((table, str(self.rules[table][foundRule]['ruleId'])))
+                    ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
                     if 'annotation' in self.decisionTables[table]:
                         for annotation in range(len(self.decisionTables[table]['annotation'])):
                             name = self.decisionTables[table]['annotation'][annotation]
                             text = self.rules[table][foundRule]['annotation'][annotation]
                             annotations.append((name, text))
+                    newData['Executed Rule'] = ruleId
+                    if len(decisionAnnotations) > 0:
+                        newData['DecisionAnnotations'] = decisionAnnotations
+                    if len(annotations) > 0:
+                        newData['RuleAnnotations'] = annotations
             elif self.decisionTables[table]['hitPolicy'][0] == 'P':
                 if len(ranks) == 0:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
@@ -1378,12 +1536,17 @@ class DMN():
                             if (thisResult[0] == '"') and (thisResult[-1] == '"'):
                                 thisResult = thisResult[1:-1]
                         newData['Result'][variable] = thisResult
-                    ruleIds.append((table, str(self.rules[table][foundRule]['ruleId'])))
+                    ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
                     if 'annotation' in self.decisionTables[table]:
                         for annotation in range(len(self.decisionTables[table]['annotation'])):
                             name = self.decisionTables[table]['annotation'][annotation]
                             text = self.rules[table][foundRule]['annotation'][annotation]
                             annotations.append((name, text))
+                    newData['Executed Rule'] = ruleId
+                    if len(decisionAnnotations) > 0:
+                        newData['DecisionAnnotations'] = decisionAnnotations
+                    if len(annotations) > 0:
+                        newData['RuleAnnotations'] = annotations
             elif self.decisionTables[table]['hitPolicy'][0] == 'O':
                 if len(ranks) == 0:
                     self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
@@ -1392,7 +1555,10 @@ class DMN():
                     self.errors = []
                     return (status, {})
                 else:
+                    ruleIds = []
+                    haveAnnotations = False
                     for i in range(len(ranks)):
+                        annotations.append([])
                         foundRule = ranks[i][-1]
                         for (variable, result, rank) in self.rules[table][foundRule]['outputs']:
                             item = self.glossary[variable]['item']
@@ -1404,21 +1570,29 @@ class DMN():
                                 if (thisResult[0] == '"') and (thisResult[-1] == '"'):
                                     thisResult = thisResult[1:-1]
                             newData['Result'][variable].append(thisResult)
-                        ruleIds.append(table + ':' + str(self.rules[table][foundRule]['ruleId']))
+                        ruleIds.append(self.decisionTables[table]['name'], table + ':' + str(self.rules[table][foundRule]['ruleId']))
                         if 'annotation' in self.decisionTables[table]:
                             for annotation in range(len(self.decisionTables[table]['annotation'])):
                                 name = self.decisionTables[table]['annotation'][annotation]
                                 text = self.rules[table][foundRule]['annotation'][annotation]
-                                annotations.append((name, text))
+                                annotations[i].append((name, text))
+                                haveAnnotations = True
+                    newData['Executed Rule'] = ruleIds
+                    if len(decisionAnnotations) > 0:
+                        newData['DecisionAnnotations'] = decisionAnnotations
+                    if haveAnnotations:
+                        newData['RuleAnnotations'] = annotations
 
-        newData['Executed Rule(s)'] = ruleIds
-        if len(annotations) > 0:
-            newData['Annotations'] = annotations
+            allResults.append(newData)
+
         status = {}
         if len(self.errors) > 0:
             status['errors'] = self.errors
             self.errors = []
-        return (status, newData)
+        if len(allResults) == 1:
+            return (status, newData)
+        else:
+            return (status, allResults)
 
 
     def test(self):
@@ -1526,15 +1700,25 @@ class DMN():
                                 if thisCol < inputColumns:
                                     if thisCell is not None:
                                         if thisCell == 'true':
-                                            thisCell = True
+                                            value = True
                                         elif thisCell == 'false':
-                                            thisCell = False
+                                            value = False
                                         elif thisCell == 'null':
-                                            thisCell = None
+                                            value = None
                                         elif isinstance(thisCell, str):
-                                            if (thisCell[0] == '"') and (thisCell[-1] == '"'):
-                                                thisCell = thisCell[1:-1]
-                                        testData[concept]['unitData'][thisRow - 2].append((heading, thisCell))
+                                            if ((thisCell[0] == '[') and (thisCell[-1] == ']')) or ((thisCell[0] == '{') and (thisCell[-1] == '}')):
+                                                value = self.data2sfeel(coordinate, thisCell)
+                                                try:
+                                                    value = eval(value)
+                                                except Exception as e:
+                                                    value = None
+                                            elif (thisCell[0] == '"') and (thisCell[-1] == '"'):
+                                                value = thisCell[1:-1].strip()
+                                            else:
+                                                value = thisCell.strip()
+                                        else:
+                                            value = thisCell
+                                        testData[concept]['unitData'][thisRow - 2].append((heading, value))
                                 elif thisCell is not None:
                                     testData[concept]['annotations'][thisRow - 2].append((heading, thisCell))
 
@@ -1688,29 +1872,38 @@ class DMN():
                         return (status, {})
                     tests['inputColumns'][thisTest].append((heading, thisIndex))
                 elif thisCol < inputColumns + outputColumns:
-                    if isinstance(thisCell, str):
-                        thisCell = thisCell.strip()
                     if thisCell == 'true':
-                        thisCell = True
+                        value = True
                     elif thisCell == 'false':
-                        thisCell = False
+                        value = False
                     elif thisCell == 'null':
-                        thisCell = None
+                        value = None
                     elif isinstance(thisCell, str):
-                        if (thisCell[0] == '"') and (thisCell[-1] == '"'):
-                            thisCell = thisCell[1:-1]
-                    tests['outputColumns'][thisTest].append((heading, thisCell))
+                        if ((thisCell[0] == '[') and (thisCell[-1] == ']')) or ((thisCell[0] == '{') and (thisCell[-1] == '}')):
+                            value = self.data2sfeel(coordinate, thisCell)
+                            try:
+                                value = eval(value)
+                            except Exception as e:
+                                value = None
+                        elif (thisCell[0] == '"') and (thisCell[-1] == '"'):
+                            value = thisCell[1:-1].strip()
+                        else:
+                            value = thisCell.strip()
+                    else:
+                        value = thisCell
+                    tests['outputColumns'][thisTest].append((heading, value))
+                    # tests['outputColumns'][thisTest].append((heading, thisCell))
                 elif thisCell is not None:
                     tests['annotations'][thisTest].append((heading, thisCell))
 
         # Now run the tests
         results = []
+        testStatus = []
         for thisTest in range(len(tests['inputColumns'])):
             results.append({})
-            testStatus = {}
             results[thisTest]['Test ID'] = thisTest + 1
             if len(tests['annotations'][thisTest]) > 0:
-                results[thisTest]['Annotations'] = tests['annotations'][thisTest]
+                results[thisTest]['TestAnnotations'] = tests['annotations'][thisTest]
             data = {}
             dataAnnotations = []
             for inputCol in range(inputColumns):
@@ -1722,11 +1915,15 @@ class DMN():
                    dataAnnotations.append(testData[concept]['annotations'][thisIndex - 1])
             results[thisTest]['data'] = data
             (status, newData) = self.decide(data)
+            if isinstance(newData, list):
+                newData = newData[-1]
             results[thisTest]['newData'] = newData
-            if len(status) > 0:
-                results[thisTest]['status'] = status
+            results[thisTest]['status'] = status
             if len(dataAnnotations) > 0:
-                results[thisTest]['dataAnnotations'] = dataAnnotations
+                results[thisTest]['DataAnnotations'] = dataAnnotations
+            if 'errors' in status:
+                testStatus = status
+                return(testStatus, results)
             mismatches = []
             for outputCol in range(outputColumns):
                 (heading, expected) = tests['outputColumns'][thisTest][outputCol]

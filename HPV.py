@@ -20,9 +20,15 @@ if __name__ == '__main__':
     data['Current Participant Risk Category'] = 'low'
     print('Testing',repr(data))
     (status, newData) = dmnRules.decide(data)
-    print('Decision',repr(newData))
+    print('Decision(newData)',repr(newData))
+    print()
+    print(newData.keys())
+    for key in newData.keys():
+        if isinstance(newData[key], dict):
+            print('\t', key, newData[key].keys())
     if 'errors' in status:
         print('With errors', status['errors'])
+    print()
 
     (testStatus, results) = dmnRules.test()
     for test in range(len(results)):
@@ -32,8 +38,8 @@ if __name__ == '__main__':
             print('Test ID', results[test]['Test ID'], 'failed')
             for failure in range(len(results[test]['Mismatches'])):
                 print(results[test]['Mismatches'][failure])
-            print(results[test]['dataAnnotations'])
-            print(results[test]['Annotations'])
+            print(results[test]['DataAnnotations'])
+            print(results[test]['TestAnnotations'])
             print(results[test]['data'])
             print(results[test]['newData'])
     if len(testStatus) > 0:
