@@ -108,9 +108,11 @@ All strings can be enclosed in double quotes, so HIGH,DECLINE and "HIGH","DECLIN
     if 'errors' in status:
         print('With errors', status['errors'])
 
-For a Single Hit Policy DMN rules table newData will be a decision dictionary of the decision. For a Multi Hit Policy DMN rules tables newData will be a list of decison dictionaries; one for each matched rule. The keys to each decision dictionary are
-- 'Result' - for a Single Hit Policy DMN rules table this will be a  dictionary where all the keys will be Variables from the Glossary and the matching the value will be the value of that Variable after the decision was made. For a Multi Hit Policy DMN rules table this will be a list of decision dictionaries, one for each matched rule.
-- 'Excuted Rule' - for a Single Hit Policy DMN rules table this will be a tuple of the Decision Table Description ('Decisions' from the 'Decision' table), the DMN rules table name ('Execute Decision Table' from the 'Decision' table) and the Rule number for the rule that matched in that DMN rules Ttble. For a Multi Hit Policy DMN rules table this will be the a list of tuples, being the Decision Table Description, DMN rules table name and matched Rule number for each matching rule.
+For a Single Hit Policy DMN rules table, newData will be a decision dictionary of the decision.
+For a Multi Hit Policy DMN rules tables newData will be a list of decison dictionaries; one for each matched rule.
+The keys to each decision dictionary are
+- 'Result' - for a Single Hit Policy DMN rules table this will be a  dictionary where all the keys will be 'Variables' from the Glossary and the matching the value will be the value of that 'Variable' after the decision was made. For a Multi Hit Policy DMN rules table this will be a list of decision dictionaries, one for each matched rule.
+- 'Excuted Rule' - for a Single Hit Policy DMN rules table this will be a tuple of the Decision Table Description ('Decisions' from the 'Decision' table), the DMN rules table name ('Execute Decision Table' from the 'Decision' table) and the Rule number for the rule that matched in that DMN rules Table. For a Multi Hit Policy DMN rules table this will be the a list of tuples, being the Decision Table Description, DMN rules table name and matched Rule number for each matching rule.
 - 'DecisionAnnotations'(optional) - list of tuples (heading, value) of the annotations from the 'Decision' table named in the 'Executed Rule' tuple.
 - 'RuleAnnotations'(optional) - for a Single Hit Policy DMN rules table, this well be a list of tuples (heading, value) of the annotations for the matching rule, if there were any annotations for the matching rule. For a Multi Hit Policy DMN rules table this will be a list of the lists of any annotations for each matching rule, where an empty list means that the associated matching rule had no annotations.
 
@@ -123,8 +125,9 @@ If the Decision table contains multiple rows (multiple DMN rules tables run sequ
 
 
 # Testing
-pyDMNrules reserves the spreadsheet name 'Test' which can be used for storing test data. The function test() read the test data, passes it through the decide() function and assembles the results which are returned to the caller.
-### Unit Test data table
+pyDMNrules reserves the spreadsheet name 'Test' which can be used for storing test data.
+The function test() reads the test data, passes it through the decide() function and assembles the results which are returned to the caller.
+### Unit Test data table(s)
 The 'Test' spreadsheet must contain Unit Test data tables.
 - Each Unit Test data table must be named with a 'Business Concept' from the Glossary.
 - The heading of the table must be Variables from the Glossary associated with the Business Concept.
@@ -152,7 +155,7 @@ The returned list is a list of dictionaries, one for each test in the 'DMNrulesT
 - 'Mismatches'(optional) - the list of mismatch reports, one for each 'DMNrulesTests' table output value that did not match the value returned from the decide() function - not present if all the data returned from the decide() function matched the values in the 'DMNrulesTest' table.
 
 # Note
-If an output should be the value of an input, then you can use the 'Variable' from the Glossary. However, if the output is a manuipulation of an input, then you will need to use the internal name for that variable, being the 'Business Concept' and the 'Attibute' concateneted with the period character. That is, 'Patient Age' is valid, but 'Patient Age + 5' is not. Instead you will need to use the syntax 'Patient.age + 5'
+If an output value should be the value of an input, then you can use the 'Variable' from the Glossary. However, if the output is a manuipulation of an input, then you will need to use the internal name for that variable, being the 'Business Concept' and the 'Attibute' concateneted with the period character. That is, 'Patient Age' is valid, but 'Patient Age + 5' is not. Instead you will need to use the syntax 'Patient.age + 5'
 
 
 # USAGE:
