@@ -1110,7 +1110,7 @@ class DMN():
                     if isinstance(thisCell, str):
                         if thisCell.startswith('Glossary'):
                             (rows, cols) = self.tableSize(cell)
-                            if cols != 3:
+                            if cols < 3:
                                 self.errors.append('Invalid Glossary - not 3 columns wide')
                                 status = {}
                                 status['errors'] = self.errors
