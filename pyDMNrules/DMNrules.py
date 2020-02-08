@@ -80,6 +80,8 @@ class DMN():
         if thisTest.startswith('not '):
             isNot = True
             thisTest = thisTest[4:].strip()
+            if thisTest == 'null':
+                    return variable + ' != null'
         elif thisTest.startswith('not(') and thisTest.endswith(')'):
             isNot = True
             thisTest = thisTest[4:-1].strip()
