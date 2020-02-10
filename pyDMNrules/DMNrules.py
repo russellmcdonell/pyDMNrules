@@ -226,7 +226,7 @@ class DMN():
                     # what's left should be an S-FEEL simple expression
                     # Could be a string constant, but missing surrounding double quotes
                     theseTests[i] = self.data2sfeel(coordinate, aTest)
-                thisTest = openBracket + '..'.join(theseTests) + closeBracket
+                thisTest = openBracket + ' .. '.join(theseTests) + closeBracket
                 if isNot:
                     if isIn:
                         return variable + ' not in(' + thisTest + ')'
