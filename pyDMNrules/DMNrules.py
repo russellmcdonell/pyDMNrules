@@ -184,7 +184,7 @@ class DMN():
                     theseTests[i] = self.data2sfeel(coordinate, aTest)
                 thisTest = ','.join(theseTests)
                 if isNot:
-                    return variable + ' not in(' + thisTest + ')'
+                    return 'not('  +variable + ' in(' + thisTest + '))'
                 else:
                     return variable + ' in(' + thisTest + ')'
         else:   # a list or range
