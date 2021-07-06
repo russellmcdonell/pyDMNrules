@@ -113,6 +113,7 @@ class DMN():
                 return 'null'
             elif isNot:
                 if isIn:
+                    # FAILS
                     return 'not(in(' + thisTest + '))'
                 else:
                     return 'not(' + thisTest + ')'
@@ -151,11 +152,11 @@ class DMN():
                 if isNot:
                     if isIn:
                         if relOp != '':
-                            return variable + ' not(in(' + relOp + ' ' + thisTest + '))'
+                            return 'not(' + variable + ' in(' + relOp + ' ' + thisTest + '))'
                         else:
-                            return variable + ' not(in(' + thisTest + '))'
+                            return 'not(' + variable + ' in(' + thisTest + '))'
                     elif inIs:
-                            return thisTest + ' not(in(' + variable + '))'
+                            return 'not(' + thisTest + ' in(' + variable + '))'
                     else:
                         if relOp != '':
                             return variable + ' not ' + relOp + ' ' + thisTest
@@ -208,7 +209,7 @@ class DMN():
                 thisTest = openBracket + thisTest + closeBracket
                 if isNot:
                     if isIn:
-                        return variable + ' not(in(' + thisTest + '))'
+                        return 'not(' + variable + ' in(' + thisTest + '))'
                     else:
                         return variable + ' not(' + thisTest + ')'
                 else:
@@ -231,7 +232,7 @@ class DMN():
                     if isIn:
                         return variable + ' not in(' + thisTest + ')'
                     else:
-                        return variable + ' not in ' + thisTest
+                        return ' not '+ variable + ' in ' + thisTest
                 else:
                     if isIn:
                         return variable + ' in(' + thisTest + ')'
