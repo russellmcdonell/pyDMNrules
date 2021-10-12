@@ -22,7 +22,24 @@ the pyDMNrules functions
 
 .. py:class:: DMN
 
+   .. automethod:: use
+
+.. py:class:: DMN
+
    .. automethod:: decide
+
+.. py:class:: DMN
+
+   .. automethod:: loadTest
+
+.. py:class:: DMN
+
+   .. automethod:: useTest
+
+.. py:class:: DMN
+
+   .. automethod:: test
+
 
 
 Input cells, input 'Variable' and Input Tests
@@ -37,32 +54,40 @@ If the input cell contains a relational operator (<,>,!=,<=,>=) followed by a si
 
 List, 'not' and 'in'
 ++++++++++++++++++++
-Frequently, in DMN rules tables, we are checking to see if a code is in a list, or not in a list.
-If the input cell contains only expressions separated by a commas,
-then pyDMNrules will iterpret this as a list and will create an "in" test; "'Variable'" "in(" "input cell" ")".
+If an input cell contains only expressions separated by commas,
+then pyDMNrules will interpret this as a list of unary tests and will create an "in function" test; "'Variable'" "in(" "input cell" ")".
+This becomes a sequence of tests which returns True if any one of the tests are True. Each expression is treated as a 'Simple Value' - see above.
 
-If you preface this simple list with 'not' then pyDMNrules will create a "not in" test; "'Variable'" "not(in(" "input cell" "))"
+If you preface this simple list with 'not' then pyDMNrules will create a "not in function" test; "'Variable'" "not(in(" "input cell" "))"
 
 However, sometime **the 'Variable' is the list**, and the test is whether or not the expression in the input cell is in the 'Variable' list.
-To specify this test form, the input cell should be an expression followed by ' in'. pyDMNrules will then create "reverse in" test;
-"input cell" "in(" "'Variable'" ")".
+To specify this form of test, the input cell should be a 'Simple Value' without an operator followed by ' in'. pyDMNrules will then create a "reverse in " test;
+"input cell" "in " "'Variable'". Again, you can suffix the 'Simple Value' with " not in" and pyDMNrules will create "reverse not in " test;
+"input cell" "not(in " "'Variable'" " )".    
+NOTE: This is using the "in" operator, not the "in()" function.
 
-Again, you can suffix the simple expression with " not in" and pyDMNrules will create "reverse not in test";
-"input cell" "not(in" "'Variable'" "))".
+If the input cell is a FEEL list or range, then pyDMNrules will interpret this as a test of "Variable" " in " list or range.
+Again, you can suffix the list or range with " not in" and pyDMNrules will create "reverse not in " test;
+"input cell" "not(in " "list or range" " )".
 
 Input Tests and the Build-in Functions
 ++++++++++++++++++++++++++++++++++++++
-Some FEEL functions [not(), odd() and even()] only ever take a single parameter and return 'true' or 'false'.
+Some FEEL functions [not(), odd(), even(), all() and any()] only ever take a single parameter and return 'true' or 'false'.
 return 'true' or 'false' and hence you don't need to specify the parameter - is is the 'Variable'.
 pyDMNrules will interpret "odd()" as "odd('Variable')".
 [In output cells, all parameters for all functions, need to be fully specified.
 To fully specify a 'Variable' from the Glossary use the internal name for the 'Variable',
 being the 'Business Concept' and the 'Attibute' concateneted with the period character]
 
-Some FEEL functions [upper case(), lower case() and flattern()] only ever take a single parameter and return a value.
-If you don'to specify the parameter pyDMNrules will assume that the 'Variable' is the parameter
-and will test if the output of that function matches the 'Variable.
-Hence "upper case()" will be become a check that 'Variable' consists of all upper case characters ['Variable' = upper case('Variable')]
+Some FEEL functions [starts with(), ends with() and list contains()] only ever take a two parameter and return 'true' or 'false'.
+If you only specify one parameter then pyDMNrules will assume that 'Variable' is the first parameter and the parameter supplied
+is the second parameter.
+
+The matches() FEEL function can have either two or three parameters; a string and match pattern plus an optional regular expression flags parameter.
+If you only supply one parameters then pyDMNrules will assume that the supplied parameter is the match pattern and will return mathes('Variable', parameter).
+If you supply two parameters then pyDMNrules will assume that you have provided the match pattern and the optional flags parameter and will return
+matches('Variable', parameter1, parameter2).  
+Note: in an input cell matches("i", "i") will only return 'true if the input variable is 'i' or 'I'.
 
 If that is not the test you want, and for all other functions, you will need to specify the test,
 fully specify the 'Variable' and enclose any ambigous strings [those with spaces or commas] in double quotes ("").
@@ -85,6 +110,15 @@ However, if the output is a manuipulation of a Glossary value, then you will nee
 being the 'Business Concept' and the 'Attibute' concateneted with the period character.
 That is, 'Patient Age' is valid and will return the current value of 'Patient.age' from the Glossary, but 'Patient Age + 5' is not.
 Instead you will need to use the syntax 'Patient.age + 5'
+
+Strings and Numbers
++++++++++++++++++++
+DMN uses a loosely typed language (S-FEEL). Python is a loosely typed language making Python a good fit for DMN.
+pyDMNrules will attempt to interpret an Excel cell containing a string as a number, if it can,
+but will revert back to treating it as a string if it cannot. Generally speaking this means that you can type up you Excel worksheets
+without having to be too careful. However some coding systems use numbers as codes, such as 'M-Male/F-Female/9-Unknown'.
+When using code sets that have numbers as codes, alway pass them a string to pyDMNrule
+and always enter them with enclosing double quotes in our Excel worksheet 'M-Male/F-Female/"9"-Unknown'.
 
 
 Usage

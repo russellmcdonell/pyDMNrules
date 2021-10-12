@@ -35,7 +35,7 @@ The 'Decisions' column contain a brief description of the DMN rules table which 
 
 The Decision table can be preceded by 'Input' columns.
 - The headings of each 'Input' column must be a Variable from the Glossary. 
-- The cells under each input heading are input test cells containing an expression about the input Variable, and which must evalutate to True, or False, depending upon the value of the input Variable.
+- The cells under each input heading are input test cells containing an expression about the input Variable, and which must evalutate to True, or False, depending upon the value of the input Variable. These inputs can be used to control the flow, that is, which Decision tables are run and which ones are skipped.
 
 pyDMNrules will evalutate all the input test cells before running the associate DMN rules table.
 If all of the input test cells do not evaluate to True, then pyDMNrules will skip this DMN decision table and moves on to the next row
@@ -108,8 +108,9 @@ All strings can be enclosed in double quotes, so HIGH,DECLINE and "HIGH","DECLIN
     if 'errors' in status:
         print('With errors', status['errors'])
 
-For a Single Hit Policy DMN rules table, newData will be a decision dictionary of the decision.
-For a Multi Hit Policy DMN rules tables newData will be a list of decison dictionaries; one for each matched rule.
+For a Single Hit Policy DMN rules table, newData will be a decision dictionary of the decision.  
+For a Multi Hit Policy DMN rules tables newData will be a list of decison dictionaries; one for each matched rule.  
+For a compound decision (a Decision table with multiple rows of DMN rules tables, where more than one Decision table is run) newData will be a list of decison dictionaries; one for each DMN rules table that is run. However, if only one of the DMN rules tables is run, and it is a Single Hit Policy DMN rules table, then newData will be a simple decision dictionary of the decision.   
 The keys to each decision dictionary are
 - 'Result' - for a Single Hit Policy DMN rules table this will be a  dictionary where all the keys will be 'Variables' from the Glossary and the matching the value will be the value of that 'Variable' after the decision was made. For a Multi Hit Policy DMN rules table this will be a list of decision dictionaries, one for each matched rule.
 - 'Excuted Rule' - for a Single Hit Policy DMN rules table this will be a tuple of the Decision Table Description ('Decisions' from the 'Decision' table), the DMN rules table name ('Execute Decision Table' from the 'Decision' table) and the Rule number for the rule that matched in that DMN rules Table. For a Multi Hit Policy DMN rules table this will be the a list of tuples, being the Decision Table Description, DMN rules table name and matched Rule number for each matching rule.
@@ -181,6 +182,11 @@ If an output value should be the value of an input, then you can use the 'Variab
     Test ID 2 passed
     Test ID 3 passed
     Decisions(results) [{'Test ID': 1, 'data': {'Encounter Diagnosis': 'Acute Sinusitis', 'Patient Age': 58, 'Patient Allergies': ['Penicillin', 'Streptomycin'], 'Patient Creatinine Level': 2, 'Patient Creatinine Clearance': 44.42, 'Patient Weight': 78, 'Patient Active Medication': 'Coumadin'}, 'newData': {'Result': {'Encounter Diagnosis': 'Acute Sinusitis', 'Recommended Medication': 'Levofloxacin', 'Recommended Dose': '250mg every 24 hours for 14 days', 'Warning': 'Coumadin and Levofloxacin can result in reduced effectiveness of Coumadin.', 'Error Message': None, 'Patient Age': 58.0, 'Patient Weight': 78.0, 'Patient Allergies': ['Penicillin', 'Streptomycin'], 'Patient Creatinine Level': 2.0, 'Patient Creatinine Clearance': 44.416667, 'Patient Active Medication': 'Coumadin'}, 'Executed Rule': ('Check Drug Interaction', 'WarnAboutDrugInteraction', 'Interaction-1')}, 'status': {}}, {'Test ID': 2, 'data': {'Encounter Diagnosis': 'Acute Sinusitis', 'Patient Age': 65, 'Patient Creatinine Level': 1.8, 'Patient Creatinine Clearance': 48.03, 'Patient Weight': 83}, 'newData': {'Result': {'Encounter Diagnosis': 'Acute Sinusitis', 'Recommended Medication': 'Amoxicillin', 'Recommended Dose': '250mg every 24 hours for 14 days', 'Warning': None, 'Error Message': None, 'Patient Age': 65.0, 'Patient Weight': 83.0, 'Patient Allergies': None, 'Patient Creatinine Level': 1.8, 'Patient Creatinine Clearance': 48.032407, 'Patient Active Medication': None}, 'Executed Rule': ('Check Drug Interaction', 'WarnAboutDrugInteraction', 'Interaction-2')}, 'status': {}}, {'Test ID': 3, 'data': {'Encounter Diagnosis': 'Diabetes', 'Patient Age': 27, 'Patient Creatinine Level': 1.88, 'Patient Weight': 110}, 'newData': {'Result': {'Encounter Diagnosis': 'Diabetes', 'Recommended Medication': None, 'Recommended Dose': None, 'Warning': None, 'Error Message': 'Sorry, this decision service can handle only Acute Sinusitis', 'Patient Age': 27.0, 'Patient Weight': 110.0, 'Patient Allergies': None, 'Patient Creatinine Level': 1.88, 'Patient Creatinine Clearance': None, 'Patient Active Medication': None}, 'Executed Rule': ('Create Message', 'ErrorMessage', 'Error-1')}, 'status': {}}]
+
+# NOTE
+You can keep the Test worksheet in a separate workbook and load it after you have loaded the rules
+
+    status = dmnRules.loadTest('TherapyTests.xlsx')
 
 
 Documentation:

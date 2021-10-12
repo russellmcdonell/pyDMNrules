@@ -1,0 +1,11 @@
+LICENSE
+README.md
+setup.py
+pyDMNrules/DMNrules.py
+pyDMNrules/__init__.py
+pyDMNrules/setup.py
+pyDMNrules.egg-info/PKG-INFO
+pyDMNrules.egg-info/SOURCES.txt
+pyDMNrules.egg-info/dependency_links.txt
+pyDMNrules.egg-info/requires.txt
+pyDMNrules.egg-info/top_level.txt
