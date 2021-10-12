@@ -1,5 +1,6 @@
 LICENSE
 README.md
+pyproject.toml
 setup.py
 pyDMNrules/DMNrules.py
 pyDMNrules/__init__.py
