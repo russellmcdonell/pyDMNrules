@@ -611,7 +611,45 @@ class TestClass:
         assert 'Output Value' in newData['Result']
         assert newData['Result']['Output Value'] == False
 
-    
+    def test_testIn1(self):
+        '''
+        Check string in list
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/In1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Value'] = 'a'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Value'] = 'd'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+
+    def test_testNotIn1(self):
+        '''
+        Check string in list
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/NotIn1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Value'] = 'a'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Value'] = 'd'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
 
 
 

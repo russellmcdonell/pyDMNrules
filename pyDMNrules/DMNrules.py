@@ -104,8 +104,9 @@ class DMN():
             self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
             return 'null'
 
-        # Check for a comma separated list of strings - however, is only a list of tests if it is not an FEEL list
+        # Check for a comma separated list of strings - however, is only a list of tests if it is not a FEEL list
         listOfTests = []
+        origList = thisTest
         try:
             for row in csv.reader([thisTest], dialect=csv.excel, doublequote=False, escapechar='\\'):
                 listOfTests = list(row)
@@ -133,6 +134,7 @@ class DMN():
         if not wasString and thisTest.startswith('not(') and thisTest.endswith(')'):
             testIsNot = True
             thisTest = thisTest[4:-1].strip()
+            listOfTest = []
 
         if not wasString and thisTest == 'odd()':         # if variable is a number, then check that it is odd
             if testIsNot:
@@ -229,23 +231,38 @@ class DMN():
         elif not wasString and thisTest.startswith('not '):
             variableIsNot = True
             thisTest = thisTest[4:].strip()
+            origList = thisTest
+            try:
+                for row in csv.reader([thisTest], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    listOfTests = list(row)
+            except:
+                pass
         variableIsIn1 = False
         variableIsIn2 = False
         match = re.match(r'^in\s*\((.*)\)$', thisTest)
         if not wasString and match is not None:
             thisTest = match.group(1)
             variableIsIn2 = True
+            listOfTests = []
         elif not wasString and thisTest.startswith('in '):
             variableIsIn1 = True
             thisTest = thisTest[3:].strip()
-        testIsIn = False
-        if not wasString and thisTest.endswith(' in'):
-            testIsIn = True
-            thisTest = thisTest[:-3].strip()
+            origList = thisTest
+            try:
+                for row in csv.reader([thisTest], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    listOfTests = list(row)
+            except:
+                pass
         testIsNegated = False
         if not wasString and thisTest.endswith(' not'):
             testIsNegated = True
             thisTest = thisTest[:-4].strip()
+            listOfTests = []
+        testIsIn = False
+        if not wasString and thisTest.endswith(' in'):
+            testIsIn = True
+            thisTest = thisTest[:-3].strip()
+            listOfTests = []
 
         # Check for bad S-FEEL
         if len(thisTest) == 0:
@@ -271,24 +288,21 @@ class DMN():
 
         # Check for a comma separated list - these should use the in() function and become a list of tests
         if len(listOfTests) > 1:
-            origTest = thisTest
-            if wasString:
-                origTest = '"' + origTest + '"'
             theseTests = []
             for thisTest in listOfTests:
                 aTest = thisTest.strip()
                 # Any wrapping double quotes will have been removed, but any escaped double quotes will have been replace with just a non-escaped double quote
-                if origTest[0] == '"':              # A string which may have been stripped of whitespace
+                if origList[0] == '"':              # A string which will have been stripped of whitespace
                     bTest = aTest.replace('"', '\\"')
                     # We need to do some suffling and aligning to find out which test were wrapped in double quotes
-                    testAt = origTest.find(bTest)                           # Must exist
-                    quoteAt = origTest.find('"', testAt + len(aTest))       # Find the trailing double quote
-                    theseTests.append(origTest[0:quoteAt + 1])
-                    commaAt = origTest.find(',', quoteAt + 1)               # Find the next comma
+                    testAt = origList.find(bTest)                           # Must exist
+                    quoteAt = origList.find('"', testAt + len(aTest))       # Find the trailing double quote
+                    theseTests.append(origList[0:quoteAt + 1])
+                    commaAt = origList.find(',', quoteAt + 1)               # Find the next comma
                     if commaAt != -1:
-                        origTest = origTest[commaAt + 1:].lstrip()
+                        origList = origList[commaAt + 1:].lstrip()
                     else:
-                        origTest = ''
+                        origList = ''
                 else:                               # Not a 'string', but could be special value
                     if (aTest == 'true') or (aTest == 'false') or (aTest == 'null'):
                         theseTests.append(aTest)                    # Append a boolean
@@ -302,16 +316,16 @@ class DMN():
                             theseTests.append(aTest)                # Append a number
                         except:
                             theseTests.append('"' + aTest + '"')    # Append a code
-                    testAt = origTest.find(aTest)                          # Must exist
-                    commaAt = origTest.find(',', testAt + 1)               # Find the next comma
+                    testAt = origList.find(aTest)                          # Must exist
+                    commaAt = origList.find(',', testAt + 1)               # Find the next comma
                     if commaAt != -1:
-                        origTest = origTest[commaAt + 1:].lstrip()
+                        origList = origList[commaAt + 1:].lstrip()
                     else:
-                        origTest = ''
+                        origList = ''
             # Assemble the list of tests for the in() function
             newTests = []
-            for i in range(len(theseTests)):
-                newTests.append(self.data2sfeel(coordinate, sheet, theseTests[i], False))
+            for thisTest in theseTests:
+                newTests.append(self.data2sfeel(coordinate, sheet, thisTest, False))
             theseTests = newTests
             # Start putting the nots and ins back in - if they are valid
             if testIsIn:        # This is list of tests in variable - which is invalid S-FEEL
@@ -324,7 +338,7 @@ class DMN():
                 self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
             if variableIsNot:               # Not specified - either unary or function
-                return variable + ' not( in(' + ','.join(theseTests) + '))'
+                return 'not(' + variable + ' in(' + ','.join(theseTests) + '))'
             else:                   # in either specified or implied
                 return variable + ' in(' + ','.join(theseTests) + ')'
 
