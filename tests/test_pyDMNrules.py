@@ -633,7 +633,7 @@ class TestClass:
 
     def test_testNotIn1(self):
         '''
-        Check string in list
+        Check string not in list
         '''
         dmnRules = pyDMNrules.DMN()
         status = dmnRules.load('../pyDMNrules/tests/NotIn1.xlsx')
@@ -650,6 +650,26 @@ class TestClass:
         assert 'errors' not in status
         assert 'Output Value' in newData['Result']
         assert newData['Result']['Output Value'] == True
+
+    def test_testVariableIn1(self):
+        '''
+        Check variable in list
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/InVariable.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Container'] = ['AAA','BBB','XXX']
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Container'] = ['AAA','BBB','CCC']
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
 
 
 

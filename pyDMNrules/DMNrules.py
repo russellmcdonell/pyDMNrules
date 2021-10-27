@@ -34,36 +34,69 @@ class DMN():
         (status, returnVal) = self.parser.sFeelParse(text)
         if 'errors' in status:
             self.errors += status['errors']
+            self.errors += ['in text ' + text]
         return returnVal
+
+
+    def replaceVariable(self, text):
+        # Replace all instance of a Variable in this text with it's BusinessConcept.Attribute
+        at = 0
+        to = len(text)
+        newText = ''
+        while at < to:
+            if text[at] == '"':         # Start of a string - skip strings
+                newText += '"'
+                at += 1
+                stringEnd = re.search(r'[^\\]"', text[at:])
+                if stringEnd is None:     # Hum, unbounded string
+                    newText += text[at:]
+                    return newText
+                newText += text[at:at + stringEnd.end()]
+                at += stringEnd.end()
+                continue
+            foundAt = foundLen = -1             # Find the nearest, longest replacement
+            foundVariable = None
+            searchTo = text[at:].find('"')      # Stop replacing at the next string
+            if searchTo == -1:
+                searchTo = to
+            for variable in self.glossary:
+                match = re.search(r'\b' + variable + r'\b', text[at:searchTo])
+                if match is not None:
+                    found = True
+                    for item in self.glossaryItems:         # Check that we haven't hit a BusinessConcept.Attribute
+                        if text[at + match.start():].startswith(item):
+                            found = False
+                            break
+                        if text[at:at + match.end()].endswith(item):   # Or landed on BusinessConcept.Attribute
+                            found = False
+                            break
+                    if not found:
+                        continue
+                    if ((foundAt == -1) or (match.start() < foundAt)):                  # First found or nearer find
+                        foundAt = match.start()
+                        foundLen = len(variable)
+                        foundVariable = variable
+                    elif ((foundAt == match.start()) and (len(variable) > foundLen)):   # longer find at same place
+                        foundAt = match.start()
+                        foundLen = len(variable)
+                        foundVariable = variable
+            if foundAt == -1:               # Nothing found
+                newText += text[at:searchTo]
+                at = searchTo
+                continue
+            elif foundAt > 0:
+                newText += text[at:at + foundAt]
+                at += foundAt
+            item = self.glossary[foundVariable]['item']             # Add BusinessConcept.Attribute to newText
+            newText += item
+            at += foundLen                                          # And skip Variable
+        return newText
 
 
     def data2sfeel(self, coordinate, sheet, data, isTest):
         # Check that a string of text (data) is valid S-FEEL
         # Start by replacing all 'Variable's with their BusinessConcept.Attribute equivalents (which are valid S-FEEL)
-        # Being careful not to replace any BusinessConcept.Attributes that already exist in data
-        text = data
-        for variable in self.glossary:
-            item = self.glossary[variable]['item']
-            if variable == self.glossary[variable]['concept']:       # The variable and it's business concept share the same name
-                at = 0
-                match = re.search(variable, text[at:])
-                while match is not None:
-                    replaceIt = True
-                    if match.end() == len(text[at:]):
-                        pass
-                    elif text[at + match.end():at + match.end() + 1] != '.':
-                        pass
-                    else:
-                        for otherItem in self.glossaryItems:
-                            if text[at:].startswith(otherItem):
-                                replaceIt = False
-                                break
-                    if replaceIt:
-                        text = text[:at] + text[at:].replace(variable, item, 1)
-                    at += match.end()
-                    match = re.search(variable, text[at:])
-            else:
-                text = text.replace(variable, item)
+        text = self.replaceVariable(data)
 
         # Use the pySFeel tokenizer to look for strings that look like 'names', but aren't in the glossary
         isError = False
@@ -413,7 +446,7 @@ class DMN():
                 newValue += self.value2sfeel(value[key])
         return newValue + '}'
 
-    def excel2sfeel(self, value, isInput, coordinate, sheet):
+    def excel2sfeel(self, value, dataType, isInput, coordinate, sheet):
         # Convert an Excel cell value into a FEEL equivalent
         # For non-strings this is a simple data conversion
         # For strings there are some recognised strings that are either DMN input rules (-)
@@ -436,8 +469,14 @@ class DMN():
             if len(value) > 0:
                 if isInput and (value == '-'):      # DMN skip input test token
                     pass
-                elif (value == 'true') or (value == 'false') or (value == 'null'):      # FEEL string constant
-                    pass
+                elif (dataType == 'b') and (value == 'True'):
+                    value = 'true'
+                elif (dataType == 'b') and (value == 'False'):
+                    value = 'false'
+                elif value == 'TRUE':
+                    value = 'true'
+                elif value == 'FALSE':
+                    value = 'false'
                 elif re.match(r'^\s*(\[|\().*(\)|\])\s*$', value) is not None:           # FEEL range or List
                     pass
                 elif re.match(r'^\s*\{.*\}\s*$', value) is not None:                      # FEEL Context
@@ -491,11 +530,31 @@ class DMN():
         elif isinstance(value, int):
             return str(value)
         elif isinstance(value, str):
-            if value in self.glossary:
-                return value
-            elif len(value) == 0:
+            if len(value) == 0:
                 return '""'
-            elif (value[0] == '"') and (value[-1] == '"'):
+            at = 0                          # If Variable, or BusinessConcept.Attribute in string then
+            to = len(value)                 # Then leave it alone - it better be fully valid FEEL
+            while at < to:
+                if value[at] == '"':         # Start of a string - skip strings
+                    at += 1
+                    stringEnd = re.search(r'[^\\]"', value[at:])
+                    if stringEnd is None:     # Hum, unbounded string
+                        break
+                    at += stringEnd.end()
+                    continue
+                searchTo = value[at:].find('"')      # Stop searching at the next string
+                if searchTo == -1:
+                    searchTo = to
+                for variable in self.glossary:
+                    match = re.search(r'\b' + variable + r'\b', value[at:searchTo])
+                    if match is not None:
+                        return value
+                for item in self.glossaryItems:
+                    match = re.search(r'\b' + item + r'\b', value[at:searchTo])
+                    if match is not None:
+                        return value
+                at += searchTo
+            if (value[0] == '"') and (value[-1] == '"'):
                 return '"' + value[1:-1].replace('"', r'\"') + '"'
             else:
                 return '"' + value.replace('"', r'\"') + '"'
@@ -687,6 +746,7 @@ class DMN():
                 ranksFound = False          # A completely empty output validity row is not valid for hit policies 'P' and 'O'
                 for thisCol in range(1, cols):
                     thisCell = cell.offset(row=2, column=thisCol).value
+                    thisDataType = cell.offset(row=2, column=thisCol).data_type
                     if thisCell is None:
                         if thisCol <= inputColumns:
                             self.decisionTables[table]['inputValidity'].append(None)
@@ -697,7 +757,7 @@ class DMN():
                     if thisCol <= inputColumns:
                         inputName = self.decisionTables[table]['inputColumns'][thisCol - 1]['name']
                         variable = self.glossary[inputName]['item']
-                        validityTests = self.excel2sfeel(thisCell, True, coordinate, sheet)
+                        validityTests = self.excel2sfeel(thisCell, thisDataType, True, coordinate, sheet)
                         test = self.test2sfeel(variable, coordinate, sheet, validityTests)
                         self.decisionTables[table]['inputValidity'].append(test)
                     elif thisCol <= inputColumns + outputColumns:
@@ -751,6 +811,7 @@ class DMN():
                     self.rules[table][thisRule]['annotation'] = []
                 for thisCol in range(cols):
                     thisCell = cell.offset(row=thisRow, column=thisCol).value
+                    thisDataType = cell.offset(row=thisRow, column=thisCol).data_type
                     coordinate = cell.offset(row=thisRow, column=thisCol).coordinate
                     if thisCol == 0:
                         thisCell = str(thisCell).strip()
@@ -766,7 +827,7 @@ class DMN():
                             else:
                                 mergeCount = 0
                             # This is an input cell
-                            thisCell = self.excel2sfeel(thisCell, True, coordinate, sheet)
+                            thisCell = self.excel2sfeel(thisCell, thisDataType, True, coordinate, sheet)
                             if thisCell == '-':
                                 lastTest[thisCol] = {}
                                 lastTest[thisCol]['name'] = '.'
@@ -802,7 +863,7 @@ class DMN():
                             # This is an output cell
                             name = self.decisionTables[table]['outputColumns'][thisCol - inputColumns - 1]['name']
                             variable = self.glossary[name]['item']
-                            result = self.excel2sfeel(thisCell, False, coordinate, sheet)
+                            result = self.excel2sfeel(thisCell, thisDataType, False, coordinate, sheet)
                             lastResult[thisCol] = {}
                             lastResult[thisCol]['name'] = name
                             lastResult[thisCol]['variable'] = variable
@@ -826,6 +887,7 @@ class DMN():
                                 rank = self.decisionTables[table]['outputValidity'][thisCol - inputColumns - 1].index(thisResult)
                             else:
                                 rank = -1
+                        result = self.replaceVariable(result)
                         # print("Setting result '{!s}' at '{!s}' on sheet '{!s}' to '{!s}' with rank '{!s}'".format(name, coordinate, sheet, result, rank))
                         self.rules[table][thisRule]['outputs'].append((name, result, thisCol - inputColumns - 1, rank))
                     else:
@@ -942,6 +1004,7 @@ class DMN():
                 ranksFound = False          # A completely empty output validity row is not valid for hit policies 'P' and 'O'
                 for thisRow in range(1, rows - 1):
                     thisCell = cell.offset(row=thisRow, column=1).value
+                    thisDataType = cell.offset(row=thisRow,column=1).data_type
                     if thisCell is None:
                         if thisRow < inputRows:
                             self.decisionTables[table]['inputValidity'].append(None)
@@ -953,7 +1016,7 @@ class DMN():
                     if thisRow <= inputRows:
                         inputName = self.decisionTables[table]['inputRows'][thisRow - 1]['name']
                         variable = self.glossary[inputName]['item']
-                        validityTests = self.excel2sfeel(thisCell, True, coordinate, sheet)
+                        validityTests = self.excel2sfeel(thisCell, thisDataType,True, coordinate, sheet)
                         test = self.test2sfeel(variable, coordinate, sheet, validityTests)
                         self.decisionTables[table]['inputValidity'].append(test)
                     elif thisRow <= inputRows + outputRows:
@@ -1004,6 +1067,7 @@ class DMN():
                     if doingAnnotation and ('annotation' not in self.rules[table][thisRule]):
                         self.rules[table][thisRule]['annotation'] = []
                     thisCell = cell.offset(row=thisRow, column=thisCol).value
+                    thisDataType = cell.offset(row=thisRow, column=thisCol).data_type
                     coordinate = cell.offset(row=thisRow, column=thisCol).coordinate
                     if thisRow <= inputRows:
                         if thisCell is not None:
@@ -1014,7 +1078,7 @@ class DMN():
                             else:
                                 mergeCount = 0
                             # This is an input cell
-                            thisCell = self.excel2sfeel(thisCell, True, coordinate, sheet)
+                            thisCell = self.excel2sfeel(thisCell, thisDataType, True, coordinate, sheet)
                             if thisCell == '-':
                                 lastTest = {}
                                 lastTest['name'] = '.'
@@ -1050,7 +1114,7 @@ class DMN():
                             # This is an output column
                             name = self.decisionTables[table]['outputRows'][thisRow - inputRows - 1]['name']
                             variable = self.glossary[name]['item']
-                            result = self.excel2sfeel(thisCell, False, coordinate, sheet)
+                            result = self.excel2sfeel(thisCell, thisDataType, False, coordinate, sheet)
                             lastResult = {}
                             lastResult['name'] = name
                             lastResult['variable'] = variable
@@ -1074,6 +1138,7 @@ class DMN():
                                 rank = self.decisionTables[table]['outputValidity'][thisRow - inputRows - 1].index(thisCellResult)
                             else:
                                 rank = -1
+                        result = self.replaceVariable(result)
                         # print("Setting result '{!s}' at '{!s}' on sheet '{!s}' to '{!s}' with rank '{!s}'".format(name, coordinate, sheet, result, rank))
                         self.rules[table][thisRule]['outputs'].append((name, result, thisRow - inputRows - 1, rank))
                     else:
@@ -1120,7 +1185,7 @@ class DMN():
                 self.errors.append("Crosstab Decision table '{!s}' is missing a horizontal heading".format(table))
                 return (rows, cols, -1)
             heading = str(heading).strip()
-            if heading.find(',') != -1:
+            if ',' in heading:
                 inputs = heading.split(',')
             else:
                 inputs = [heading]
@@ -1139,6 +1204,7 @@ class DMN():
                         self.decisionTables[table]['inputColumns'][thisCol]['tests'] = []
 
                     thisCell = cell.offset(row=2 + thisVariable, column=width + thisCol).value
+                    thisDataType = cell.offset(row=2 + thisVariable, column=width + thisCol).data_type
                     coordinate = cell.offset(row=2 + thisVariable, column=width + thisCol).coordinate
                     if thisCell is not None:
                         for merged in self.mergedCells:
@@ -1148,7 +1214,7 @@ class DMN():
                         else:
                             mergeCount = 0
                         # This is an input cell
-                        thisCell = self.excel2sfeel(thisCell, True, coordinate, sheet)
+                        thisCell = self.excel2sfeel(thisCell, thisDataType, True, coordinate, sheet)
                         if thisCell == '-':
                             lastTest[thisVariable] = {}
                             lastTest[thisVariable]['name'] = '.'
@@ -1189,7 +1255,7 @@ class DMN():
                 self.errors.append("Crosstab Decision table '{!s}' is missing a vertical heading".format(table))
                 return (rows, cols, -1)
             heading = str(heading).strip()
-            if heading.find(',') != -1:
+            if ',' in heading:
                 inputs = heading.split(',')
             else:
                 inputs = [heading]
@@ -1208,6 +1274,7 @@ class DMN():
                         self.decisionTables[table]['inputRows'][thisRow]['tests'] = []
 
                     thisCell = cell.offset(row=1 + height + thisRow, column=1 + thisVariable).value
+                    thisDataType = cell.offset(row=1 + height + thisRow, column=1 + thisVariable).data_type
                     coordinate = cell.offset(row=1 + height + thisRow, column=1 + thisVariable).coordinate
                     if thisCell is not None:
                         for merged in self.mergedCells:
@@ -1217,7 +1284,7 @@ class DMN():
                         else:
                             mergeCount = 0
                         # This is an input cell
-                        thisCell = self.excel2sfeel(thisCell, True, coordinate, sheet)
+                        thisCell = self.excel2sfeel(thisCell, thisDataType, True, coordinate, sheet)
                         if thisCell == '-':
                             lastTest[thisVariable] = {}
                             lastTest[thisVariable]['name'] = '.'
@@ -1256,15 +1323,16 @@ class DMN():
                     self.rules[table][thisRule]['tests'] += self.decisionTables[table]['inputColumns'][col]['tests']
                     self.rules[table][thisRule]['tests'] += self.decisionTables[table]['inputRows'][row]['tests']
                     thisCell = cell.offset(row=1 + height + row, column=width + col).value
+                    thisDataType = cell.offset(row=1 + height + row, column=width + col).data_type
                     coordinate = cell.offset(row=1 + height + row, column=width + col).coordinate
                     if thisCell is None:
                         self.errors.append("Missing output result at '{!s}' on sheet '{!s}'".format(coordinate, sheet))
                         return (rows, cols, -1)
                     # This is an output cell
-                    thisCell = self.excel2sfeel(thisCell, False, coordinate, sheet)
                     name = self.decisionTables[table]['output']['name']
                     variable = self.glossary[name]['item']
-                    result = self.excel2sfeel(thisCell, False, coordinate, sheet)
+                    result = self.excel2sfeel(thisCell, thisDataType, False, coordinate, sheet)
+                    result = self.replaceVariable(result)
                     # print("Setting result at '{!s}' on sheet '{!s}' to '{!s}'".format(coordinate, sheet, result))
                     self.rules[table][thisRule]['outputs'].append((name, result, 0, 0))
                     thisRule += 1
@@ -1529,7 +1597,7 @@ class DMN():
                         else:
                             mergeCount = 0
                         # This is an input value
-                        thisCell = self.excel2sfeel(thisCell, True, coordinate, 'Decision')
+                        thisCell = self.excel2sfeel(thisCell, thisDataType, True, coordinate, 'Decision')
                         if thisCell == '-':
                             lastTest[thisCol] = {}
                             lastTest[thisCol]['name'] = '.'
@@ -1557,7 +1625,7 @@ class DMN():
                     decision = cell.offset(row=thisRow, column=thisCol).value
                 elif thisCol == inputColumns + 1:
                     table = cell.offset(row=thisRow, column=thisCol).value
-                    coordinate = cell.offset(row=1, column=thisCol).coordinate
+                    coordinate = cell.offset(row=thisRow, column=thisCol).coordinate
                     if (table in self.decisionTables) and (self.decisionTables[table]['name'] != decision):
                         self.errors.append("Execution Decision Table '{!s}' redefined in the Decision table at '{!s}'".format(table, coordinate))
                         status = {}
@@ -1614,7 +1682,6 @@ class DMN():
                                         continue
                                     # Mark it as parsed
                                     parsedRanges.append(thisMerged)
-                            break
         # Now check that every decision table has been found
         for (table, inputTests, decisionAnnotations) in self.decisions:
             if table not in self.rules:
@@ -1645,46 +1712,50 @@ class DMN():
         # Replace any references to glossary items with their current value
         # If there are any, then 'text' will be a string (wrapped in "")
         # which 'must be' valid FEEL when the values are replace and the wrapping "" is removed
-        newText = text
         if len(text) == 0:
             return text
-        if (text[0] == '"') and (text[-1] == '"'):
-            newText = newText[1:-1]
-        oldText = newText
-        # Start by replacing all 'Variable's with their BusinessConcept.Attribute equivalents (which are valid S-FEEL)
-        # Being careful not to replace any BusinessConcept.Attributes that already exist in data
-        for variable in self.glossary:
-            item = self.glossary[variable]['item']
-            if variable == self.glossary[variable]['concept']:       # The variable and it's business concept share the same name
-                at = 0
-                match = re.search(variable, newText[at:])
-                while match is not None:
-                    replaceIt = True
-                    if match.end() == len(newText[at:]):
-                        pass
-                    elif newText[at + match.end():at + match.end() + 1] != '.':
-                        pass
-                    else:
-                        for otherItem in self.glossaryItems:
-                            if newText[at:].startswith(otherItem):
-                                replaceIt = False
-                                break
-                    if replaceIt:
-                        newText = newText[:at] + newText[at:].replace(variable, item, 1)
-                    at += match.end()
-                    match = re.search(variable, newText[at:])
-            else:
-                newText = newText.replace(variable, item)
-
-        for item in self.glossaryItems:
-            itemPattern = r'\b' + item.replace('.', r'\.') + r'\b'
-            itemValue = self.sfeel('{}'.format(item))
+        at = 0
+        to = len(text)
+        newText = ''
+        while at < to:
+            if text[at] == '"':         # Start of a string - skip strings
+                newText += '"'
+                at += 1
+                stringEnd = re.search(r'[^\\]"', text[at:])
+                if stringEnd is None:     # Hum, unbounded string
+                    newText += text[at:]
+                    return newText
+                newText += text[at:at + stringEnd.end()]
+                at += stringEnd.end()
+                continue
+            foundAt = foundLen = -1             # Find the nearest, longest replacement
+            foundItem = None
+            searchTo = text[at:].find('"')      # Stop replacing at the next string
+            if searchTo == -1:
+                searchTo = to
+            for item in self.glossaryItems:
+                match = re.search(r'\b' + item + r'\b', text[at:searchTo])
+                if match is not None:
+                    if ((foundAt == -1) or (match.start() < foundAt)):                  # First found or nearer find
+                        foundAt = match.start()
+                        foundLen = len(item)
+                        foundItem = item
+                    elif ((foundAt == match.start()) and (len(item) > foundLen)):   # longer find at same place
+                        foundAt = match.start()
+                        foundLen = len(item)
+                        foundItem = item
+            if foundAt == -1:               # Nothing found
+                newText += text[at:searchTo]
+                at = searchTo
+                continue
+            elif foundAt > 0:
+                newText += text[at:at + foundAt]
+                at += foundAt
+            itemValue = self.sfeel('{}'.format(foundItem))
             value = self.value2sfeel(itemValue)
-            newText = re.sub(itemPattern, value, newText)
-        if newText == oldText:
-            return text
-        else:
-            return newText
+            newText += value
+            at += foundLen                                          # And skip Variable
+        return newText
 
 
     def decide(self, data):
@@ -1813,8 +1884,10 @@ class DMN():
                             status['errors'] = self.errors
                             self.errors = []
                             return (status, {})
+                    # print('testing:', variable, test, item, itemValue, value)
                     retVal = self.sfeel(str(test))
                     if not retVal:
+                        # print('failed')
                         break
                 else:
                     # We found a hit

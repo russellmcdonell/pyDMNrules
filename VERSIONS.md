@@ -1,3 +1,8 @@
+### 1.2.3 - Another bug fix release
+ * fixed/improved substitution of BusinessConcept.Attribute for Variable in input and output cells when Decision tables are parsed
+ * fixed substitution of actual value for BusinessConcept.Attribute when inputs are tested and output created in decide()
+ * fixed bug in parsing Excel booleans (TRUE/FALSE)
+### 1.2.2 - Fixed bug when variable referenced in a test/output and the variable and it's Business Concept shared the same name
 ### 1.2.1 - Fixed bug in in() function
 ### 1.2.0 - First candidate for a production release
 * added lots of pytest tests
