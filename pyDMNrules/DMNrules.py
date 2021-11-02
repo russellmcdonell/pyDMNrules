@@ -10,6 +10,8 @@ import pySFeel
 import openpyxl
 from openpyxl import load_workbook
 from openpyxl import utils
+from pandas import Series, DataFrame
+import pandas
 
 class DMN():
 
@@ -43,7 +45,7 @@ class DMN():
         at = 0
         to = len(text)
         newText = ''
-        while at < to:
+        while at < to:      # Continue until we've replaced every Variable and reached the end of the text
             if text[at] == '"':         # Start of a string - skip strings
                 newText += '"'
                 at += 1
@@ -62,12 +64,15 @@ class DMN():
             for variable in self.glossary:
                 match = re.search(r'\b' + variable + r'\b', text[at:searchTo])
                 if match is not None:
+                    # We don't prohibit using the same 'name' for a Variable AND a Business Concept AND an Attribute
+                    # So BusinessConcept.Attribute could look like BusinessConcept.Variable or Variable.Attribute
+                    # Either way, we shouldn't replace the name 'Variable' - BusinessConcept.Attribute is replace with a value later
                     found = True
-                    for item in self.glossaryItems:         # Check that we haven't hit a BusinessConcept.Attribute
-                        if text[at + match.start():].startswith(item):
+                    for item in self.glossaryItems:                 # Check every BusinessConcept.Attribute combination
+                        if text[at + match.start():].startswith(item):  # Check that we haven't hit a BusinessConcept.Attribute
                             found = False
                             break
-                        if text[at:at + match.end()].endswith(item):   # Or landed on BusinessConcept.Attribute
+                        if text[at:at + match.end()].endswith(item):    # Or landed on BusinessConcept.Attribute
                             found = False
                             break
                     if not found:
@@ -1758,6 +1763,177 @@ class DMN():
         return newText
 
 
+    def decidePandas(self, dfInput, **kwargs):
+        """"
+        Process a Pandas DataFrame and make a decision for each row, based upon the input data in each row
+
+        This routine runs each row of data in a Pandas dataframe throught the decide() function
+        and returns a Pandas Series (dfStatus) of the status of each decision,
+        and a Pandas Dataframe (dfResults), being the Results of the last Decision Table processed by the decide() function
+
+        Args:
+            param1 (dataframe): The Pandas dataframe of rows of data about which decisions need to be made.
+
+                - Some of the column names in the dataframe (or a mapping of them - see headings below) must match a 'Variable' name in the Glossary
+                - each matching 'Variable' in the Glossary will be set to the value from this matching column for each row in the dataframe
+                - decide() will then be called to make a decision about this row of data
+
+            OPTIONAL
+            
+            headings=columns
+            
+                - columns is a dictionary where each keys match a column name from dfInput and the value matches a Variable from the Glossary
+                - if headings is not specified, then some the column names in dfInput must match Variable names in the Glossary
+                - the data passed to the decide() function is taken from dfInput columns, with a column name in headings, or found in the Glossary
+
+        Returns:
+            tuple: (dfStatus, dfResults, dfDecision)
+
+            dfStatus is a Pandas Series with one entry for each row in the dataframe param1
+
+                - if the associated call to the function decide() returned an empty status dictionary then the entry will be the value 'no errors'
+                - if the associated call to the function decide() returned 'errors' in the status dictionary then the entry will be a pipe (|) delimited list of all of the errors
+
+            dfResults is a Pandas DataFrame of the decisions returned by the decide() function
+
+                - the column names of dfResults will be 'Variable' names from the Glossary
+                - Glossary Variable names will be modified to make them valid Pandas column names
+                - (braces, brackets and parenthesis remove, spaces replaced with '_', all arithmetic operators replaced with '_')
+                - the values for each column will be the associated value returned by the decide() function for the last decision (last Decision Table run)
+                - each row in dfResults will be the decision for the matching row in the dataframe param1
+
+            dfDecision is a Pandas DataFrame containing details about the 'decision' (last rule executed in the last decision table tested)
+
+                - column 'DecisionName' is the name of the decision from the 'Decisions/Executed Decision Tables' table on the Decisions worksheet
+                - column 'TableName' is the name of the last executed decision table
+                - column 'RuleID' is the rule id of the last rule execute in the last decision table - the rule id of the decision
+                - column 'DecisionAnnotations' is any annotation for the 'DecisionName'
+                - column 'RuleAnnotations' is any annotations for the 'RuleID'
+
+        Errors:
+            dfStatus will be a Pandas Series with a single entry, being the error message, under the following error conditions
+
+                - an invalid optional argument is passed to decidePandas(): error message - 'Invalid args:xxxxx'
+                
+                - param1 is not a Pandas Dataframe: error message - 'param1 is not a Pandas Dataframe'
+            
+                - headings is provided and it is not a dictionary: error message - 'headings is not a dictionary'
+
+                - if any key in headings cannot be found in the Glossary: error message - "headings Variable 'xx' is not in the Glossary"
+
+        """
+
+        dfResults = DataFrame()                                 # An empty DataFrame for errors
+        dfDecision = DataFrame()                                # An empty DataFrame for errors
+        args = set(['headings'])                                # The known optional arguements
+        argsDiff = set(kwargs.keys()) - args                    # The passed optional arguments minus the know optional arguments
+        if len(argsDiff) > 0:                                   # Something is wrong
+            dfStatus = Series(['Invalid args:' + str(tuple(argsDiff))], name='status')
+            return(dfStatus, dfResults, dfDecision)
+        if not isinstance(dfInput, DataFrame):
+            dfStatus = Series(['param1 is not a Pandas DataFrame'], name='status')
+            return(dfStatus, dfResults, dfDecision)
+        columns = {}
+        if 'headings' in kwargs:               # Get any input heading mappings (column name to Glossary Variable)
+            columns = kwargs['headings']
+            if not isinstance(columns, dict):
+                dfStatus = Series(['headings is not a dictionary'], name='status')
+                return(dfStatus, dfResults, dfDecision)
+            for column in columns:
+                if columns[column] not in self.glossary:
+                    dfStatus = Series(["headings Variable '" + columns[column] + "' is not in the Glossary"], name='status')
+                    return(dfStatus, dfResults, dfDecision)
+        variables = {}
+        columnTyped = {}
+        pandasColumns = {}
+        for variable in self.glossary:
+            heading = variable
+            heading = heading.replace('(', '').replace(')', '').replace('[', '').replace(']', '').replace('{', '').replace('}', '')
+            heading = heading.replace(' ', '_').replace('+', '_').replace('-', '_').replace('*', '_').replace('/', '_')
+            while heading.find('__') != -1:
+                heading = heading.replace('__', '_')
+            variables[variable] = heading
+            columnTyped[variable] = False
+            pandasColumns[heading] = pandas.Series([], dtype='str')         # Set a default data type of str
+        dfResults = DataFrame(pandasColumns)                                # A DataFrame with columns and data types
+
+        status = []
+        for row in dfInput.itertuples(index=False):         # Iterate over each row in the dfInput Data Frame
+            data = {}
+            thisRow = row._asdict()                         # Turning each row into a dictionary
+            for column in thisRow:                          # Map each column to a Glossary Variable
+                if column in columns:
+                    variable = columns[column]
+                elif column in self.glossary:
+                    variable = column
+                else:
+                    continue
+                if pandas.isna(thisRow[column]):            # Map missing data to None
+                    data[variable] = None
+                else:
+                    data[variable] = thisRow[column]        # else assign the value
+            
+            (thisStatus, newData) = self.decide(data)       # Make a decision about this row
+
+            if (thisStatus != {}) and ('errors' in thisStatus):     # Handle errors
+                status.append('|'.join(thisStatus['errors']))
+                pandasData = {}
+                for variable in variables:
+                    pandasData[variables[variable]] = None
+                dfResults = dfResults.append(pandasData, ignore_index=True)     # And append it to dfResults - the output Data Frame
+                decisionData = {}
+                decisionData['RuleName'] = None
+                decisionData['TableName'] = None
+                decisionData['RuleID'] = None
+                decisionData['DecisionAnnotations'] = None
+                decisionData['RuleAnnotations']  = None
+                dfDecision = dfDecision.append(decisionData, ignore_index=True)
+            else:
+                status.append('no errors')
+                if isinstance(newData, list):                       # Find the last 'Result' - result of last decision rule
+                    dmnData = newData[-1]['Result']
+                    (ruleName, tableName, ruleID) = dmnDecision = newData[-1]['Executed Rule']
+                    dmnDecisionAnnotations = None
+                    if 'DecisionAnnotations' in newData[-1]:
+                        dmnDecisionAnnotations = newData[-1]['DecisionAnnotations']
+                    dmnRuleAnnotations = None
+                    if 'RuleAnnotations' in newData[-1]:
+                        dmnRuleAnnotations = newData[-1]['RuleAnnotations']
+                else:
+                    dmnData = newData['Result']                     # Grab the only 'Result'
+                    (ruleName, tableName, ruleID) = dmnDecision = newData['Executed Rule']
+                    dmnDecisionAnnotations = None
+                    if 'DecisionAnnotations' in newData:
+                        dmnDecisionAnnotations = newData['DecisionAnnotations']
+                    dmnRuleAnnotations = None
+                    if 'RuleAnnotations' in newData:
+                        dmnRuleAnnotations = newData['RuleAnnotations']
+                pandasData = {}                                 # Create Pandas DataFrame compatible data
+                typeColumns = False                             # And assign a data type to the column if this is the first non-null value
+                dataTypes = {}
+                for variable in variables:
+                    if not columnTyped[variable]:
+                        typeColumns = True
+                        if dmnData[variable] is not None:
+                            dataTypes[variables[variable]] = type(dmnData[variable])
+                            columnTyped[variable] = True
+                    pandasData[variables[variable]] = dmnData[variable]         # Return this value
+                dfResults = dfResults.append(pandasData, ignore_index=True)     # And append these values to dfResults - the output Data Frame
+                if typeColumns:                                                 # Assign data types to any column for which we have new data types
+                    dfResults = dfResults.astype(dataTypes)
+                decisionData = {}                                               # Create the Decision data which explain the decision
+                decisionData['RuleName'] = ruleName
+                decisionData['TableName'] = tableName
+                decisionData['RuleID'] = ruleID
+                decisionData['DecisionAnnotations'] = dmnDecisionAnnotations
+                decisionData['RuleAnnotations'] = dmnRuleAnnotations
+                dfDecision = dfDecision.append(decisionData, ignore_index=True)
+
+        dfStatus = Series(status, name='status')                                # Build the 'dfStatus' series 
+        return(dfStatus, dfResults, dfDecision)                                 # Return the status, results and decisions
+
+
+
     def decide(self, data):
         """
         Make a decision
@@ -1783,9 +1959,11 @@ class DMN():
 
             newData
 
-            * for a Single Hit Policy DMN rules table newData will be a decision dictionary of the decision.
+            * for a Single Hit Policy, single DMN rules table executed, newData will be a decision dictionary of the decision.
 
-            * for a Multi Hit Policy DMN rules tables newData will be a list of decison dictionaries; one for each matched rule.
+            * for a Multi Hit Policy DMN rules table, newData will be a list of decison dictionaries; one for each matched rule.
+
+            * if more than one DMN rules table is selected and extcuted, newData will be a list of decison dictionaries
 
             The keys to each decision dictionary are
                 - 'Result' - for a Single Hit Policy DMN rules table, this will be a  dictionary where all the keys will be 'Variables'
@@ -1838,12 +2016,12 @@ class DMN():
             item = self.glossary[variable]['item']
             value = data[variable]
             # Convert the passed Python data to it's FEEL equivalent
-            value = self.value2sfeel(value)
-            if value is None:
+            sFeelValue = self.value2sfeel(value)
+            if sFeelValue is None:
                 validData = False
             else:
                 # Store the S-FEEL value for this item
-                retVal = self.sfeel('{} <- {}'.format(item, value))
+                retVal = self.sfeel('{} <- {}'.format(item, sFeelValue))
         if not validData:
             self.errors.append("Input variable '{!s}' has is invalid S-FEEL value '{!s}'".format(variable, data[variable]))
             status = {}
@@ -1879,7 +2057,8 @@ class DMN():
                         testValidity = self.decisionTables[table]['inputValidity'][inputIndex]
                         retVal = self.sfeel('{}'.format(testValidity))
                         if not retVal:
-                            self.errors.append('Variable {!s} has S-FEEL input value {!s} which does not match input validity list {!s}'.format(item, value, testValidity))
+                            message = 'Variable {!s} has S-FEEL input value {!s} which does not match input validity list {!s} for decision table {!s}'
+                            self.errors.append(message.format(item, value, testValidity, table))
                             status = {}
                             status['errors'] = self.errors
                             self.errors = []
@@ -1992,7 +2171,8 @@ class DMN():
                         if self.decisionTables[table]['outputValidity'][outputIndex] != []:
                             validList = self.decisionTables[table]['outputValidity'][outputIndex]
                             if thisResult not in validList:
-                                self.errors.append("Variable '{!s}' has output value '{!s}' which does not match validity list '{!s}'".format(variable, repr(thisResult), repr(validList)))
+                                message = "Variable '{!s}' has output value '{!s}' which does not match validity list '{!s}' in table {!s}"
+                                self.errors.append(message.format(variable, repr(thisResult), repr(validList), table))
                                 status = {}
                                 status['errors'] = self.errors
                                 self.errors = []

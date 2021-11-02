@@ -1,5 +1,7 @@
 import pyDMNrules
 from openpyxl import load_workbook
+import csv
+import pandas as pd
 
 class TestClass:
     def test_HPV1(self):
@@ -671,5 +673,235 @@ class TestClass:
         assert 'Output Value' in newData['Result']
         assert newData['Result']['Output Value'] == False
 
+    def test_testANSNAP1(self):
+        '''
+        Check AN-SNAP decision
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/AN-SNAP rules (DMN).xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Multidisciplinary'] = False
+        data['Admitted Flag'] = False
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        assert 'Result' in newData[-1]
+        assert 'AN-SNAP V4 code' in newData[-1]['Result']
+        assert newData[-1]['Result']['AN-SNAP V4 code'] == '4999'
+        assert 'Executed Rule' in newData[-1]
+        assert len(newData[-1]['Executed Rule']) == 3
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert rule == 'General Multidisciplinary Flag Error Rule 1'
+        data['Multidisciplinary'] = True
+        data['Care Type'] = 'GEM'
+        data['Single Day of Care'] = False
+        data['Ongoing Pain'] = False
+        data['Clinic'] = 'Memory'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        assert 'Result' in newData[-1]
+        assert 'AN-SNAP V4 code' in newData[-1]['Result']
+        assert newData[-1]['Result']['AN-SNAP V4 code'] == '4UC3'
+        assert 'Executed Rule' in newData[-1]
+        assert len(newData[-1]['Executed Rule']) == 3
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert rule == 'Non-AdmittedGEM Rule 3'
+        data['Care Type'] = 'Rehabilitation'
+        del data['Single Day of Care']
+        del data['Ongoing Pain']
+        del data['Clinic']
+        data['Patient Age'] = 19
+        data['Assessment Only'] = True
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        assert 'Result' in newData[-1]
+        assert 'AN-SNAP V4 code' in newData[-1]['Result']
+        assert newData[-1]['Result']['AN-SNAP V4 code'] == '4SY1'
+        assert 'Executed Rule' in newData[-1]
+        assert len(newData[-1]['Executed Rule']) == 3
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert rule == 'Non-Admitted Adult Rehab Rule 1'
+        data['Assessment Only'] = False
+        data['AROC code'] = '7'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        assert 'Result' in newData[-1]
+        assert 'AN-SNAP V4 code' in newData[-1]['Result']
+        assert newData[-1]['Result']['AN-SNAP V4 code'] == '4SG1'
+        assert 'Executed Rule' in newData[-1]
+        assert len(newData[-1]['Executed Rule']) == 3
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert rule == 'Non-Admitted Adult Rehab Rule 5'
+        data['Patient Age Type'] = '1'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        assert 'Result' in newData[-1]
+        assert 'AN-SNAP V4 code' in newData[-1]['Result']
+        assert newData[-1]['Result']['AN-SNAP V4 code'] == '4X05'
+        assert 'Executed Rule' in newData[-1]
+        assert len(newData[-1]['Executed Rule']) == 3
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert rule == 'Non-Admitted Paed Rehab Rule 5'
 
+    def test_testANSNAP2(self):
+        '''
+        Check AN-SNAP decision
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/AN-SNAP rules (DMN).xlsx')
+        assert 'errors' not in status
+        thisPatient = thisAdmission = None
+        with open('../pyDMNrules/subAcuteExtract.csv', 'r', newline='') as csvInFile:
+            csvReader = csv.DictReader(csvInFile, dialect=csv.excel)
+            for row in csvReader:
+                ''' Let's go for SNAP '''
+                for col in row:                 # Start by mapping the booleans
+                    if row[col] == 'TRUE':
+                        row[col] = True
+                    elif row[col] == 'True':
+                        row[col] = True
+                    elif row[col] == 'true':
+                        row[col] = True
+                    elif row[col] == 'FALSE':
+                        row[col] = False
+                    elif row[col] == 'False':
+                        row[col] = False
+                    elif row[col] == 'false':
+                        row[col] = False
+                    elif row[col] == 'NULL':
+                        row[col] = None
+                    elif row[col] == 'Null':
+                        row[col] = None
+                    elif row[col] == 'null':
+                        row[col] = None
+                data = {}
+                data['Multidisciplinary'] = True
+                data['Admitted Flag'] = True
+                data['Care Type'] = row['Care_Type']
+                LOS = int(float(row['Phase_Length_of_Stay']))
+                data['Length of Stay'] = LOS
+                if LOS >= 92:
+                    data['Long term care'] = True
+                else:
+                    data['Long term care'] = False
+                data['Same-day admitted care'] = row['Same_day_admitted_care']
+                data['GEM clinic'] = None                       # Required for non-admitted GEM AN-SNAP. No non-admitted GEM records
+                data['Patient Age'] = int(float(row['Patient_Age']))
+                data['Patient Age Type'] = None
+                data['AROC code'] = row['AROC_code']
+                data['FIM Motor score'] = int(float(row['Phase_FIM_Motor_Score']))
+                data['FIM Cognition score'] = int(float(row['Phase_FIM_Cognition_Score']))
+                data['Delirium or Dimentia'] = row['Delirium_or_Dimentia']
+                data['Phase Type'] = row['Phase_Type']
+                if ((row['Patient_UR'] != thisPatient) or (row['Admission_Date'] != thisAdmission)):
+                    thisPatient = row['Patient_UR']
+                    thisAdmission = row['Admission_Date']
+                    if row['Phase_Type'] == 'Unstable':
+                        data['First Phase'] = True
+                    else:
+                        data['First Phase'] = False
+                else:
+                    data['First Phase'] = False
+                data['RUG-ADL'] = int(float(row['Phase_RUG_ADL_Score']))
+                (status, newData) = dmnRules.decide(data)        
+                assert isinstance(newData, list)
+                assert 'Result' in newData[-1]
+                assert 'AN-SNAP V4 code' in newData[-1]['Result']
+                assert newData[-1]['Result']['AN-SNAP V4 code'] == row['Phase_AN_SNAP_V4_0_code']
+
+    def test_testANWU21(self):
+        '''
+        Check ANWU21 decision
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/Subacute NWAU calculator (DMN).xlsx')
+        assert 'errors' not in status
+        thisPatient = thisAdmission = None
+        with open('../pyDMNrules/subAcuteExtract.csv', 'r', newline='') as csvInFile:
+            csvReader = csv.DictReader(csvInFile, dialect=csv.excel)
+            for row in csvReader:
+                ''' Let's go for SNAP '''
+                for col in row:                 # Start by mapping the booleans
+                    if row[col] == 'TRUE':
+                        row[col] = True
+                    elif row[col] == 'True':
+                        row[col] = True
+                    elif row[col] == 'true':
+                        row[col] = True
+                    elif row[col] == 'FALSE':
+                        row[col] = False
+                    elif row[col] == 'False':
+                        row[col] = False
+                    elif row[col] == 'false':
+                        row[col] = False
+                    elif row[col] == 'NULL':
+                        row[col] = None
+                    elif row[col] == 'Null':
+                        row[col] = None
+                    elif row[col] == 'null':
+                        row[col] = None
+                data = {}
+                data['Care Type'] = row['Care_Type']
+                data['LOS'] = int(float(row['Phase_Length_of_Stay']))
+                data['Same Day Admission'] = row['Same_day_admitted_care']
+                data['Patient Age'] = row['Patient_Age']
+                data['AN-SNAP V4.0'] = row['Phase_AN_SNAP_V4_0_code']
+                data['Care Type'] = row['Care_Type']
+                data['Hospital Remoteness'] = '0'           # Hospital is not remote
+                data['Postcode'] = row['Postcode']
+                data['SA2'] = None                          # Addresses are not geocoded
+                data['Dialysis Flag'] = row['Dialysis_Flag']
+                data['RadioTherapy Flag'] = row['RadioTherapy_Flag']
+                data['Funding Source'] = row['Funding_Source']
+                data['Indigenous Status'] = row['Indigenous_Status']
+                data['State'] = '2'                         # Funded by DHHS Victoria
+                (status, newData) = dmnRules.decide(data)
+                assert isinstance(newData, list)
+                assert 'Result' in newData[-1]
+                assert 'NWAU21' in newData[-1]['Result']
+                assert (int(newData[-1]['Result']['NWAU21'] * 10000.0 + 0.5) / 10000.0) == (int(float(row['Phase_NWAU21']) * 10000.0 + 0.5) / 10000.0)
+
+    def test_testANSNAPpandas(self):
+        '''
+        Check AN-SNAP decision using Pandas DataFrames
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/AN-SNAP rules (DMN).xlsx')
+        assert 'errors' not in status
+        dataTypes = {'Patient_Age':int, 'Episode_Length_of_stay':int, 'Phase_Length_of_stay':int,
+        'Phase_FIM_Motor_Score':int, 'Phase_FIM_Cognition_Score':int, 'Phase_RUG_ADL_Score':int,
+        'Phase_w01':float, 'Phase_NWAU21':float,
+        'Indigenous_Status':str, 'Care_Type':str, 'Funding_Source':str, 'Phase_Impairment_Code':str,
+        'AROC_code':str, 'Phase_AN_SNAP_V4_0_code':str,
+        'Same_day_addmitted_care':bool, 'Delerium_or_Dimentia':bool, 'RadioTherapy_Flag':bool, 'Dialysis_Flag':bool}
+        dates = ['BirthDate', 'Admission_Date', 'Discharge_Date', 'Phase_Start_Date', 'Phase_End_Date']
+        dfInput = pd.read_csv('../pyDMNrules/subAcuteExtract.csv', dtype=dataTypes, parse_dates=dates)
+        dfInput['Multidisciplinary'] = True
+        dfInput['Admitted_Flag'] = True
+        dfInput['Length_of_Stay'] = dfInput['Phase_Length_of_Stay']
+        dfInput['Long_term_care'] = False
+        dfInput.loc[dfInput['Length_of_Stay'] > 92, 'Long_term_care'] = True
+        dfInput['Same_day_admitted_care'] = False
+        dfInput['GEM_clinic'] = None
+        dfInput['Patient_Age_Type'] = None
+        dfInput['First_Phase'] = False
+        grouped = dfInput.groupby(['Patient_UR', 'Admission_Date'])
+        for index in grouped.head(1).index:
+            if dfInput.loc[index]['Phase_Type'] == 'Unstable':
+                dfInput.loc[index, 'First_Phase'] = True
+        columns = {'Admitted_Flag':'Admitted Flag', 'Care_Type':'Care Type', 'Length_of_Stay':'Length of Stay', 'Long_term_care':'Long term care',
+        'Same_day_admitted_care':'Same-day admitted care', 'GEM_clinic':'GEM clinic', 'Patient_Age':'Patient Age', 'Patient_Age_Type':'Patient Age Type',
+        'AROC_code':'AROC code', 'Delirium_of_Dimentia':'Delirium or Dimentia', 'Phase_Type':'Phase Type', 'First_Phase':'First Phase', 'Phase_FIM_Motor_Score':'FIM Motor score',
+        'Phase_FIM_Cognition_Score':'FIM Cognition score', 'Phase_RUG_ADL_Score':'RUG-ADL', 'Delirium_or_Dimentia':'Delirium or Dimentia',
+        'Problem_Severity_Scrore':'Problem Severity Score'}
+        (dfStatus, dfResults, dfDecision) = dmnRules.decidePandas(dfInput, headings=columns)
+        assert dfStatus.where(dfStatus == 'no errors').count() == dfStatus.count()
+        assert dfResults['AN_SNAP_V4_code'].count() == dfInput['Phase_AN_SNAP_V4_0_code'].count()
+        for index in dfResults.index:
+            assert dfResults.loc[index, 'AN_SNAP_V4_code'] == dfInput.loc[index, 'Phase_AN_SNAP_V4_0_code']
 

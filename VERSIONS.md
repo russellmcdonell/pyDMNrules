@@ -1,3 +1,10 @@
+### 1.2.4 - Added Pandas functionality
+ * decidePandas(dfInput) passes each row of DataFrame dfInput through the decide() function.
+    - Returns (dfStatus, dfResults, dfDecision)
+        - dfStatus is a Series of 'no errors' or the 'errors' from the decision
+        - dfResults is a DataFrame with one row for each row of dfInput, being 'Results' of the final decision
+        - dfDecision is a DataFrame describing the decision for each row of dfInput (RuleName, TableName, RuleID, DecisionAnnotations, RuleAnnotations)
+
 ### 1.2.3 - Another bug fix release
  * fixed/improved substitution of BusinessConcept.Attribute for Variable in input and output cells when Decision tables are parsed
  * fixed substitution of actual value for BusinessConcept.Attribute when inputs are tested and output created in decide()
