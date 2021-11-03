@@ -2,3 +2,4 @@ datetime
 pySFeel
 openpyxl
 pandas
+docutils<0.18
