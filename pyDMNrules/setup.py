@@ -18,7 +18,13 @@ setuptools.setup(
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Operating System :: OS Independent',
     ],
+    keywords='DMN,pandas',
     python_requires='>=3.6',
     install_requires=['re', 'csv', 'datetime', 'pySFeel','openpyxl', 'pandas'],
+    extra_requires={
+        'docs': ['sphinx==4.2.0',
+        'sphinx_rtd_theme>0.2.4',
+        'recommonmark'],
+    }
 )
 
