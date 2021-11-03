@@ -40,7 +40,7 @@ extensions = [
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
-sys.path.insert(os.path.abspath('../..'))
+sys.path.insert(0, os.path.abspath('../..'))
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
