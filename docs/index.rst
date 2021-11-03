@@ -14,17 +14,17 @@ pyDMNrules Documentation
 The pyDMNrules functions
 ------------------------
 
-.. py:module:: pyDMNrules
+.. module:: pyDMNrules
 
-.. py:class:: DMN
+.. class:: DMN
 
    .. automethod:: load
 
-.. py:class:: DMN
+.. class:: DMN
 
    .. automethod:: use
 
-.. py:class:: DMN
+.. class:: DMN
 
    .. automethod:: decide
 
@@ -132,7 +132,7 @@ Examples
 --------
 Examples (\*.py, \*.xlsx) can be found at [github](https://github.com/russellmcdonell/pyDMNrules)
 
-.. py:class:: DMN
+.. class:: DMN
 
    .. automethod:: decidePandas
 
@@ -184,7 +184,7 @@ Usage
       print(index, dfResults.loc[index, 'AN_SNAP_V4_code'])
 
 
-.. py:class:: DMN
+.. class:: DMN
 
    .. automethod:: test
 
@@ -274,11 +274,11 @@ Usage
         if 'errors' in testStatus[test]:
             print('Failed')
 
-.. py:class:: DMN
+.. class:: DMN
 
    .. automethod:: loadTest
 
-.. py:class:: DMN
+.. class:: DMN
 
    .. automethod:: useTest
 
