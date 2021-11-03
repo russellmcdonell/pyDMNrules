@@ -16,7 +16,7 @@ The pyDMNrules functions
 
 .. automodule:: pyDMNrules
 
-   .. class:: DMN
+   .. autoclass:: DMN
 
       .. automethod:: load
 
@@ -31,8 +31,6 @@ The pyDMNrules functions
       .. automethod:: loadTest
 
       .. automethod:: useTest
-
-
 
 
 Input cells, input 'Variable' and Input Tests
