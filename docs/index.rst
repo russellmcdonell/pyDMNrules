@@ -15,23 +15,23 @@ pyDMNrules Documentation
 The pyDMNrules functions
 ------------------------
 
-.. automodule:: pyDMNrules
+.. py:module:: pyDMNrules
 
-   .. autoclass:: DMN
+.. py:class:: DMN
 
-      .. automethod:: load
+   .. automethod:: load
 
-      .. automethod:: use
+   .. automethod:: use
 
-      .. automethod:: decide
+   .. automethod:: decide
 
-      .. automethod:: decidePandas
+   .. automethod:: decidePandas
 
-      .. automethod:: test
+   .. automethod:: test
 
-      .. automethod:: loadTest
+   .. automethod:: loadTest
 
-      .. automethod:: useTest
+   .. automethod:: useTest
 
 
 Input cells, input 'Variable' and Input Tests
