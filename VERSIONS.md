@@ -1,3 +1,4 @@
+### 1.2.5 - Updated dependencies and documentation
 ### 1.2.4 - Added Pandas functionality
  * decidePandas(dfInput) passes each row of DataFrame dfInput through the decide() function.
     - Returns (dfStatus, dfResults, dfDecision)

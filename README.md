@@ -1,6 +1,5 @@
 # pyDMNrules
-An implementation DMN (Decision Model Notation) in Python, using the [pySFeel](https://pypi.org/project/pySFeel/) and [openpyxl](https://pypi.org/project/openpyxl/)
-modules.
+An implementation of DMN (Decision Model Notation) in Python, using the [pySFeel](https://pypi.org/project/pySFeel/), [openpyxl](https://pypi.org/project/openpyxl/) and [pandas](httpsL//pypi.org/project/pandas) modules.
 
 DMN rules are read from an Excel workbook.
 Then data, matching the input variables in the DMN rules is passed to the decide() function.
@@ -123,6 +122,65 @@ If the Decision table contains multiple rows (multiple DMN rules tables run sequ
     ExampleHPV.xlsx loaded
     Testing {'Participant Age': 36, 'In Test of Cure': True, 'Hysterectomy Flag': False, 'Cancer Flag': False, 'HPV-V': 'V0', 'Current Participant Risk Category': 'low'}
     Decision(newData) {'Result': {'Immune Deficient Flag': None, 'Hysterectomy Flag': False, 'Cancer Flag': False, 'In Test of Cure': True, 'Participant Age': 36.0, 'Current Participant Risk Category': 'low', 'HPV-V': 'V0', 'Cyto-S': None, 'Cyto-E': None, 'Cyto-O': None, 'Collection Method': None, 'Test Risk Code': 'L', 'New Participant Risk Category': 'low', 'Participant Care Pathway': 'toBeDetermined', 'Next Rule': 'CervicalRisk2'}, 'Executed Rule': ('Determine CervicalRisk', 'FirstTestOfCervicalRisk', '20'), 'DecisionAnnotations': [('Decides', 'Test risk')], 'RuleAnnotations': [('Test meaning', 'need more info')]}
+
+
+# Pandas functionality
+pyDMNrules can pass a Pandas DataFrame of value through the decide() function and return a Pandas DataFrame of decisions. The status of each decision is returned as a Pandas Series and a Pandas DataFrame of information about each decision is also returned.
+
+    (dfStatus, dfResults, dfDecision) = dmnRules.decidePandas(dfInput)
+
+    dfInput is a Pandas DataFrame of rows of data about which decisions need to be made. Column names are mapped to decision Variables.
+
+    dfResults is a Pandas DataFrame with one row for each decision. Column names are mapped from all the Variables in the Glossary.
+
+    dfStatus is a Pandas Series of one value each decision. Values are the error message, or 'no errors' of there were no errors.
+
+    dfDecision is a Pandas DataFrame with columns of 'DecisionName', 'TableName', 'RuleId', 'DecisionAnnotation' and 'RuleAnnotation'
+
+# USAGE:
+
+    import pyDMNrules
+    import pandas as pd
+    import sys
+    dmnRules = pyDMNrules.DMN()
+    status = dmnRules.load('AN-SNAP rules (DMN).xlsx')
+    if 'errors' in status:
+      print('AN-SNAP rules (DMN).xlsx has errors', status['errors'])
+      sys.exit(0)
+    else:
+        print('AN-SNAP rules (DMN).xlsx loaded')
+    dataTypes = {'Patient_Age':int, 'Episode_Length_of_stay':int,     'Phase_Length_of_stay':int,
+        'Phase_FIM_Motor_Score':int, 'Phase_FIM_Cognition_Score':int, 'Phase_RUG_ADL_Score':int,
+        'Phase_w01':float, 'Phase_NWAU21':float,
+        'Indigenous_Status':str, 'Care_Type':str, 'Funding_Source':str, 'Phase_Impairment_Code':str,
+        'AROC_code':str, 'Phase_AN_SNAP_V4_0_code':str,
+        'Same_day_addmitted_care':bool, 'Delerium_or_Dimentia':bool, 'RadioTherapy_Flag':bool, 'Dialysis_Flag':bool}
+    dates = ['BirthDate', 'Admission_Date', 'Discharge_Date', 'Phase_Start_Date', 'Phase_End_Date']
+    dfInput = pd.read_csv('subAcuteExtract.csv', dtype=dataTypes, parse_dates=dates)
+    dfInput['Multidisciplinary'] = True
+    dfInput['Admitted_Flag'] = True
+    dfInput['Length_of_Stay'] = dfInput['Phase_Length_of_Stay']
+    dfInput['Long_term_care'] = False
+    dfInput.loc[dfInput['Length_of_Stay'] > 92, 'Long_term_care'] = True
+    dfInput['Same_day_admitted_care'] = False
+    dfInput['GEM_clinic'] = None
+    dfInput['Patient_Age_Type'] = None
+    dfInput['First_Phase'] = False
+    grouped = dfInput.groupby(['Patient_UR', 'Admission_Date'])
+    for index in grouped.head(1).index:
+        if dfInput.loc[index]['Phase_Type'] == 'Unstable':
+         dfInput.loc[index, 'First_Phase'] = True
+    columns = {'Admitted_Flag':'Admitted Flag', 'Care_Type':'Care Type', 'Length_of_Stay':'Length of Stay', 'Long_term_care':'Long term care',
+        'Same_day_admitted_care':'Same-day admitted care', 'GEM_clinic':'GEM clinic', 'Patient_Age':'Patient Age', 'Patient_Age_Type':'Patient Age Type',
+        'AROC_code':'AROC code', 'Delirium_of_Dimentia':'Delirium or Dimentia', 'Phase_Type':'Phase Type', 'First_Phase':'First Phase', 'Phase_FIM_Motor_Score':'FIM Motor score',
+        'Phase_FIM_Cognition_Score':'FIM Cognition score', 'Phase_RUG_ADL_Score':'RUG-ADL', 'Delirium_or_Dimentia':'Delirium or Dimentia',
+        'Problem_Severity_Scrore':'Problem Severity Score'}
+    (dfStatus, dfResults, dfDecision) = dmnRules.decidePandas(dfInput, headings=columns)
+    if dfStatus.where(dfStatus != 'no errors').count() > 0:
+        print('has errors', dfStatus.loc['status' != 'no errors'])
+        sys.exit(0)
+    for index in dfResults.index:
+        print(index, dfResults.loc[index, 'AN_SNAP_V4_code'])
 
 
 # Testing

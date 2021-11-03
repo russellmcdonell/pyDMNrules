@@ -11,7 +11,7 @@ pyDMNrules Documentation
    :maxdepth: 2
    :caption: Contents:
 
-the pyDMNrules functions
+The pyDMNrules functions
 ------------------------
 
 .. py:module:: pyDMNrules
@@ -27,19 +27,6 @@ the pyDMNrules functions
 .. py:class:: DMN
 
    .. automethod:: decide
-
-.. py:class:: DMN
-
-   .. automethod:: loadTest
-
-.. py:class:: DMN
-
-   .. automethod:: useTest
-
-.. py:class:: DMN
-
-   .. automethod:: test
-
 
 
 Input cells, input 'Variable' and Input Tests
@@ -120,7 +107,6 @@ without having to be too careful. However some coding systems use numbers as cod
 When using code sets that have numbers as codes, alway pass them a string to pyDMNrule
 and always enter them with enclosing double quotes in our Excel worksheet 'M-Male/F-Female/"9"-Unknown'.
 
-
 Usage
 -----
 
@@ -145,6 +131,57 @@ Usage
 Examples
 --------
 Examples (\*.py, \*.xlsx) can be found at [github](https://github.com/russellmcdonell/pyDMNrules)
+
+.. py:class:: DMN
+
+   .. automethod:: decidePandas
+
+Usage
+-----
+
+::
+   import pyDMNrules
+   import pandas as pd
+   import sys
+   dmnRules = pyDMNrules.DMN()
+   status = dmnRules.load('AN-SNAP rules (DMN).xlsx')
+    if 'errors' in status:
+      print('AN-SNAP rules (DMN).xlsx has errors', status['errors'])
+      sys.exit(0)
+    else:
+        print('AN-SNAP rules (DMN).xlsx loaded')
+   dataTypes = {'Patient_Age':int, 'Episode_Length_of_stay':int, 'Phase_Length_of_stay':int,
+      'Phase_FIM_Motor_Score':int, 'Phase_FIM_Cognition_Score':int, 'Phase_RUG_ADL_Score':int,
+      'Phase_w01':float, 'Phase_NWAU21':float,
+      'Indigenous_Status':str, 'Care_Type':str, 'Funding_Source':str, 'Phase_Impairment_Code':str,
+      'AROC_code':str, 'Phase_AN_SNAP_V4_0_code':str,
+      'Same_day_addmitted_care':bool, 'Delerium_or_Dimentia':bool, 'RadioTherapy_Flag':bool, 'Dialysis_Flag':bool}
+   dates = ['BirthDate', 'Admission_Date', 'Discharge_Date', 'Phase_Start_Date', 'Phase_End_Date']
+   dfInput = pd.read_csv('subAcuteExtract.csv', dtype=dataTypes, parse_dates=dates)
+   dfInput['Multidisciplinary'] = True
+   dfInput['Admitted_Flag'] = True
+   dfInput['Length_of_Stay'] = dfInput['Phase_Length_of_Stay']
+   dfInput['Long_term_care'] = False
+   dfInput.loc[dfInput['Length_of_Stay'] > 92, 'Long_term_care'] = True
+   dfInput['Same_day_admitted_care'] = False
+   dfInput['GEM_clinic'] = None
+   dfInput['Patient_Age_Type'] = None
+   dfInput['First_Phase'] = False
+   grouped = dfInput.groupby(['Patient_UR', 'Admission_Date'])
+   for index in grouped.head(1).index:
+      if dfInput.loc[index]['Phase_Type'] == 'Unstable':
+         dfInput.loc[index, 'First_Phase'] = True
+   columns = {'Admitted_Flag':'Admitted Flag', 'Care_Type':'Care Type', 'Length_of_Stay':'Length of Stay', 'Long_term_care':'Long term care',
+      'Same_day_admitted_care':'Same-day admitted care', 'GEM_clinic':'GEM clinic', 'Patient_Age':'Patient Age', 'Patient_Age_Type':'Patient Age Type',
+      'AROC_code':'AROC code', 'Delirium_of_Dimentia':'Delirium or Dimentia', 'Phase_Type':'Phase Type', 'First_Phase':'First Phase', 'Phase_FIM_Motor_Score':'FIM Motor score',
+      'Phase_FIM_Cognition_Score':'FIM Cognition score', 'Phase_RUG_ADL_Score':'RUG-ADL', 'Delirium_or_Dimentia':'Delirium or Dimentia',
+      'Problem_Severity_Scrore':'Problem Severity Score'}
+   (dfStatus, dfResults, dfDecision) = dmnRules.decidePandas(dfInput, headings=columns)
+   if dfStatus.where(dfStatus != 'no errors').count() > 0:
+      print('has errors', dfStatus.loc['status' != 'no errors'])
+      sys.exit(0)
+   for index in dfResults.index:
+      print(index, dfResults.loc[index, 'AN_SNAP_V4_code'])
 
 
 .. py:class:: DMN
@@ -236,6 +273,15 @@ Usage
                 print(results[test]['Mismatches'][failure])
         if 'errors' in testStatus[test]:
             print('Failed')
+
+.. py:class:: DMN
+
+   .. automethod:: loadTest
+
+.. py:class:: DMN
+
+   .. automethod:: useTest
+
 
 Examples
 --------
