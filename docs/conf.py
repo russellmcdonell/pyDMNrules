@@ -25,7 +25,6 @@ author = 'Russell McDonell'
 version = '1.2.5'
 release = '0.1.7'
 
-
 master_doc = 'index'
 
 
@@ -41,12 +40,12 @@ extensions = [
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+sys.path.insert(os.path.abspath('../..'))
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = []
-
 
 # -- Options for HTML output -------------------------------------------------
 
