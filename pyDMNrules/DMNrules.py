@@ -1794,6 +1794,12 @@ class DMN():
                 - if the associated call to the function decide() returned an empty status dictionary then the entry will be the value 'no errors'
                 - if the associated call to the function decide() returned 'errors' in the status dictionary then the entry will be a pipe (|) delimited list of all of the errors
 
+                dfStatus will be a Pandas Series with a single entry, being the error message, under the following error conditions
+                    - an invalid optional argument is passed to decidePandas(): error message - 'Invalid args:xxxxx'
+                    - param1 is not a Pandas Dataframe: error message - 'param1 is not a Pandas Dataframe'
+                    - headings is provided and it is not a dictionary: error message - 'headings is not a dictionary'
+                    - if any key in headings cannot be found in the Glossary: error message - "headings Variable 'xx' is not in the Glossary"
+
             dfResults is a Pandas DataFrame of the decisions returned by the decide() function
 
                 - the column names of dfResults will be 'Variable' names from the Glossary
@@ -1809,17 +1815,6 @@ class DMN():
                 - column 'RuleID' is the rule id of the last rule execute in the last decision table - the rule id of the decision
                 - column 'DecisionAnnotations' is any annotation for the 'DecisionName'
                 - column 'RuleAnnotations' is any annotations for the 'RuleID'
-
-        Errors:
-            dfStatus will be a Pandas Series with a single entry, being the error message, under the following error conditions
-
-                - an invalid optional argument is passed to decidePandas(): error message - 'Invalid args:xxxxx'
-                
-                - param1 is not a Pandas Dataframe: error message - 'param1 is not a Pandas Dataframe'
-            
-                - headings is provided and it is not a dictionary: error message - 'headings is not a dictionary'
-
-                - if any key in headings cannot be found in the Glossary: error message - "headings Variable 'xx' is not in the Glossary"
 
         """
 

@@ -14,19 +14,24 @@ pyDMNrules Documentation
 The pyDMNrules functions
 ------------------------
 
-.. module:: pyDMNrules
+.. automodule:: pyDMNrules
 
-.. class:: DMN
+   .. autoclass:: DMN
 
-   .. automethod:: load
+      .. automethod:: load
 
-.. class:: DMN
+      .. automethod:: use
 
-   .. automethod:: use
+      .. automethod:: decide
 
-.. class:: DMN
+      .. automethod:: decidePandas
 
-   .. automethod:: decide
+      .. automethod:: test
+
+      .. automethod:: loadTest
+
+      .. automethod:: useTest
+
 
 
 Input cells, input 'Variable' and Input Tests
@@ -132,23 +137,21 @@ Examples
 --------
 Examples (\*.py, \*.xlsx) can be found at [github](https://github.com/russellmcdonell/pyDMNrules)
 
-.. class:: DMN
 
-   .. automethod:: decidePandas
-
-Usage
------
+Usage - decidePandas()
+----------------------
 
 ::
+
    import pyDMNrules
    import pandas as pd
    import sys
    dmnRules = pyDMNrules.DMN()
    status = dmnRules.load('AN-SNAP rules (DMN).xlsx')
-    if 'errors' in status:
+   if 'errors' in status:
       print('AN-SNAP rules (DMN).xlsx has errors', status['errors'])
       sys.exit(0)
-    else:
+   else:
         print('AN-SNAP rules (DMN).xlsx loaded')
    dataTypes = {'Patient_Age':int, 'Episode_Length_of_stay':int, 'Phase_Length_of_stay':int,
       'Phase_FIM_Motor_Score':int, 'Phase_FIM_Cognition_Score':int, 'Phase_RUG_ADL_Score':int,
@@ -183,10 +186,6 @@ Usage
    for index in dfResults.index:
       print(index, dfResults.loc[index, 'AN_SNAP_V4_code'])
 
-
-.. class:: DMN
-
-   .. automethod:: test
 
 The test() function
 -------------------
@@ -250,8 +249,8 @@ The returned list of results is a list of dictionaries, one for each test in the
   returned from the decide() function - not present if all the data returned from the decide() function
   matched the values in the 'DMNrulesTest' table.
 
-Usage
------
+Usage - test()
+--------------
 
 ::
 
@@ -273,14 +272,6 @@ Usage
                 print(results[test]['Mismatches'][failure])
         if 'errors' in testStatus[test]:
             print('Failed')
-
-.. class:: DMN
-
-   .. automethod:: loadTest
-
-.. class:: DMN
-
-   .. automethod:: useTest
 
 
 Examples

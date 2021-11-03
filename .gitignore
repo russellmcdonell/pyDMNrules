@@ -1,7 +1,9 @@
 .pytest_cache
+__pycache__
 build
 dist
 tests/__pycache__
 pySFeel/__pycache__
 pySFeel.egg-info
 .vscode
+sphinxOut
