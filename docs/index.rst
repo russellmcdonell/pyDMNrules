@@ -15,7 +15,7 @@ pyDMNrules Documentation
 The pyDMNrules functions
 ------------------------
 
-.. automodule:: DMNrules
+.. automodule:: pyDMNrules
 
    .. autoclass:: DMN
 
