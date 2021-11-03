@@ -16,21 +16,30 @@ The pyDMNrules functions
 
 .. automodule:: pyDMNrules
 
+
    .. autoclass:: DMN
+
 
       .. automethod:: load
 
+
       .. automethod:: use
+
 
       .. automethod:: decide
 
+
       .. automethod:: decidePandas
+
 
       .. automethod:: test
 
+
       .. automethod:: loadTest
 
+
       .. automethod:: useTest
+      
 
 
 
