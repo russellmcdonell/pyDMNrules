@@ -1,5 +1,3 @@
-re
-csv
 datetime
 pySFeel
 openpyxl
