@@ -1,3 +1,7 @@
+### 1.2.6 - Bug fix and optimization
+* fixed datetime.date/time/datetime and datetime.timedelta data type errors in decidePandas() function
+* added optimization for testing input values against fixed values and outputing fixed output values
+
 ### 1.2.5 - Updated dependencies and documentation
 ### 1.2.4 - Added Pandas functionality
  * decidePandas(dfInput) passes each row of DataFrame dfInput through the decide() function.
