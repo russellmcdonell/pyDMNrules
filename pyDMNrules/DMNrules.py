@@ -67,11 +67,11 @@ class DMN():
                 match = re.search(r'\b' + variable + r'\b', text[at:searchTo])
                 if match is not None:
                     # We don't prohibit using the same 'name' for a Variable AND a Business Concept AND an Attribute
-                    # So BusinessConcept.Attribute could look like BusinessConcept.Variable or Variable.Attribute
-                    # Either way, we shouldn't replace the name 'Variable' - BusinessConcept.Attribute is replace with a value later
+                    # So BusinessConcept.Attribute could be BusinessConcept.Variable or Variable.Attribute
+                    # Neither of which is a match - BusinessConcept.Attribute is replace with a value later
                     found = True
                     for item in self.glossaryItems:                 # Check every BusinessConcept.Attribute combination
-                        if text[at + match.start():].startswith(item):  # Check that we haven't hit a BusinessConcept.Attribute
+                        if text[at + match.start():].startswith(item):  # Check that we haven't hit BusinessConcept.Attribute
                             found = False
                             break
                         if text[at:at + match.end()].endswith(item):    # Or landed on BusinessConcept.Attribute
@@ -842,7 +842,6 @@ class DMN():
                         thisCell = str(thisCell).strip()
                         self.rules[table][thisRule]['ruleId'] = thisCell
                         continue
-
                     if thisCol <= inputColumns:
                         if thisCell is not None:
                             for merged in self.mergedCells:
@@ -886,7 +885,7 @@ class DMN():
                             (test, isFixed, fixedValue) = lastTest[thisCol]['test']
                         else:
                             continue
-                        # print("Setting test '{!s}' at '{!s}' on sheet '{!s}' to '{!s}'".format(name, coordinate, sheet, test))
+                        # print("Setting test '{!s}' for table '{!s}', at '{!s}' on sheet '{!s}' to '{!s}' ({!s},{!s})".format(name, table, coordinate, sheet, test, isFixed, fixedValue))
                         self.rules[table][thisRule]['tests'].append((name, test, thisCol - 1, isFixed, fixedValue))
                     elif thisCol <= inputColumns + outputColumns:
                         if thisCell is not None:
@@ -1163,7 +1162,7 @@ class DMN():
                             (test, isFixed, fixedValue) = lastTest['test']
                         else:
                             continue
-                        # print("Setting test '{!s}' at '{!s}' on sheet '{!s}' to '{!s}'".format(name, coordinate, sheet, test))
+                        # print("Setting test '{!s}' for table '{!s}' at '{!s}' on sheet '{!s}' to '{!s}' ({!s},{!s})".format(name, table, coordinate, sheet, test, isFixed, fixedValue))
                         self.rules[table][thisRule]['tests'].append((name, test, thisRow - 1, isFixed, fixedValue))
                     elif thisRow <= inputRows + outputRows:
                         if thisCell is not None:
@@ -1311,7 +1310,7 @@ class DMN():
                     else:
                         self.errors.append("Missing horizontal input test at '{!s}' on sheet '{!s}'".format(coordinate, sheet))
                         continue
-                    # print("Setting horizontal test '{!s}' at '{!s}' on sheet '{!s}' to '{!s}'".format(name, coordinate, sheet, test))
+                    # print("Setting horizontal test '{!s}' for table '{!s}' at '{!s}' on sheet '{!s}' to '{!s}' ({!s},{!s})".format(name, table, coordinate, sheet, test, isFixed, fixedValue))
                     self.decisionTables[table]['inputColumns'][thisCol]['tests'].append((name, test, 0, isFixed, fixedValue))
 
             # Parse the vertical heading
@@ -1393,7 +1392,7 @@ class DMN():
                     else:
                         self.errors.append("Missing vertical input test at '{!s}' on sheet '{!s}'".format(coordinate, sheet))
                         continue
-                    # print("Setting veritical test '{!s}' at '{!s}' on sheet '{!s}' to '{!s}'".format(name, coordinate, sheet, test))
+                    # print("Setting vertical test '{!s}' for table '{!s}' at '{!s}' on sheet '{!s}' to '{!s}' ({!s},{!s})".format(name, table, coordinate, sheet, test, isFixed, fixedValue))
                     self.decisionTables[table]['inputRows'][thisRow]['tests'].append((name, test, 0, isFixed, fixedValue))
 
             # Now build the Rules
@@ -1830,6 +1829,8 @@ class DMN():
             searchTo = text[at:].find('"')      # Stop replacing at the next string
             if searchTo == -1:
                 searchTo = to
+            else:
+                searchTo += at
             for item in self.glossaryItems:
                 match = re.search(r'\b' + item + r'\b', text[at:searchTo])
                 if match is not None:
@@ -2157,17 +2158,17 @@ class DMN():
                 for i in range(len(self.rules[table][thisRule]['tests'])):      # Every test in this decision rule
                     (variable, test, inputIndex, isFixed, fixedValue) = self.rules[table][thisRule]['tests'][i]
                     item = self.glossary[variable]['item']
-                    (testValidity, isFixed, fixedValue) = self.decisionTables[table]['inputValidity'][inputIndex]
+                    (testValidity, validityIsFixed, validityFixedValue) = self.decisionTables[table]['inputValidity'][inputIndex]
                     if testValidity is not None:        # There is a validity test for this input variable
                         failed = False
-                        if isFixed and (variable in data):             # The value must match a fixed value
-                            if data[variable] != fixedValue:
+                        if validityIsFixed and (variable in data):             # The value must match a fixed value
+                            if data[variable] != validityFixedValue:
                                 failed = True
                             else:
                                 retval = True
                         else:
                             (failed, retVal) = self.sfeel('{}'.format(testValidity))
-                        if failed:
+                        if not validityIsFixed and failed:
                             self.errors.append("Bad S-FEEL for validity '{}' for item '{!s}' in table '{!s}' for rule '{!s}'".format(testValidity, item, table, thisRule))
                         if not retVal:
                             message = 'Variable {!s} has S-FEEL input value {!s} which does not match input validity list {!s} for decision table {!s}'
@@ -2176,16 +2177,17 @@ class DMN():
                             status['errors'] = self.errors
                             self.errors = []
                             return (status, {})
-                    print('testing:', variable, test, item, isFixed, fixedValue)
+                    # print('testing:', variable, test, item, isFixed, fixedValue)
                     failed = False
-                    if isFixed:             # For this rule, the input must match a fixed value
+                    if isFixed and (variable in data):             # For this rule, the input must match a fixed value
+                        value = data[variable]
                         if value != fixedValue:
                             failed = True
                         else:
-                            retVal = fixedValue
+                            retVal = True
                     else:
                         (failed, retVal) = self.sfeel(str(test))
-                    if failed:
+                    if not isFixed and failed:
                         self.errors.append("Bad S-FEEL when when testing validity '{}' for item '{!s}' in table '{!s}' for rule '{!s}'".format(str(test), item, table, thisRule))
                     if not retVal:
                         # print('failed')
@@ -2320,6 +2322,7 @@ class DMN():
                                 status['errors'] = self.errors
                                 self.errors = []
                                 return (status, {})
+                        # print('Setting returned value for', variable, 'to', thisResult)
                         newData['Result'][variable] = thisResult
                     ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
                     if 'annotation' in self.decisionTables[table]:

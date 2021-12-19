@@ -1,5 +1,6 @@
 ### 1.2.6 - Bug fix and optimization
 * fixed datetime.date/time/datetime and datetime.timedelta data type errors in decidePandas() function
+* fixed bug when assigning Glossary values to invalid FEEL (e.g. "string1" "string2" - typos in Variable names can create invalid FEEL)
 * added optimization for testing input values against fixed values and outputing fixed output values
 
 ### 1.2.5 - Updated dependencies and documentation
