@@ -2183,6 +2183,7 @@ class DMN():
                         value = data[variable]
                         if value != fixedValue:
                             failed = True
+                            retVal = False
                         else:
                             retVal = True
                     else:
