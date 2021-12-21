@@ -1,3 +1,7 @@
+### 1.2.8 - Bug fixed
+* fixed error message when failing input validity
+* fixed error when a Pandas dataframe has invalid column names
+* added 'strict' option to decidePandas() for forcing the return of only valid Pandas column names
 ### 1.2.7 - Bug fix
 * fixed bug in fixed value comparisons of booleans
 ### 1.2.6 - Bug fix and optimization

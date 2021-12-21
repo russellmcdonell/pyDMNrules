@@ -6,6 +6,7 @@ import sys
 import re
 import csv
 import datetime
+from typing import ValuesView
 import pySFeel
 import openpyxl
 from openpyxl import load_workbook
@@ -1881,6 +1882,11 @@ class DMN():
                 - if headings is not specified, then some the column names in dfInput must match Variable names in the Glossary
                 - the data passed to the decide() function is taken from dfInput columns, with a column name in headings, or found in the Glossary
 
+            strict=true
+
+                - return Pandas compliant column headings
+                  (convert Glossary names to valid Pandas headings)
+
         Returns:
             tuple: (dfStatus, dfResults, dfDecision)
 
@@ -1933,36 +1939,39 @@ class DMN():
                 if columns[column] not in self.glossary:
                     dfStatus = Series(["headings Variable '" + columns[column] + "' is not in the Glossary"], name='status')
                     return(dfStatus, dfResults, dfDecision)
+        pandasStrict = False
+        if 'strict' in kwargs:                  # Return valid Pandas column headings
+            if kwargs['strict']:
+                pandasStrict = True
         variables = {}
         columnTyped = {}
         pandasColumns = {}
         for variable in self.glossary:
             heading = variable
-            heading = heading.replace('(', '').replace(')', '').replace('[', '').replace(']', '').replace('{', '').replace('}', '')
-            heading = heading.replace(' ', '_').replace('+', '_').replace('-', '_').replace('*', '_').replace('/', '_')
-            while heading.find('__') != -1:
-                heading = heading.replace('__', '_')
+            if pandasStrict:            # Convert Glossary variables into valid Pandas column headings
+                heading = heading.replace('(', '').replace(')', '').replace('[', '').replace(']', '').replace('{', '').replace('}', '')
+                heading = heading.replace(' ', '_').replace('+', '_').replace('-', '_').replace('*', '_').replace('/', '_')
+                while heading.find('__') != -1:
+                    heading = heading.replace('__', '_')
             variables[variable] = heading
             columnTyped[variable] = False
             pandasColumns[heading] = pandas.Series([], dtype='str')         # Set a default data type of str
         dfResults = DataFrame(pandasColumns)                                # A DataFrame with columns and data types
 
         status = []
-        for row in dfInput.itertuples(index=False):         # Iterate over each row in the dfInput Data Frame
+        for index, row in dfInput.iterrows():         # Iterate over each row in the dfInput Data Frame
             data = {}
-            thisRow = row._asdict()                         # Turning each row into a dictionary
-            for column in thisRow:                          # Map each column to a Glossary Variable
+            for column in row.keys():                          # Map each column to a Glossary Variable
                 if column in columns:
                     variable = columns[column]
                 elif column in self.glossary:
                     variable = column
                 else:
                     continue
-                if pandas.isna(thisRow[column]):            # Map missing data to None
+                if pandas.isna(row[column]):            # Map missing data to None
                     data[variable] = None
                 else:
-                    data[variable] = thisRow[column]        # else assign the value
-            
+                    data[variable] = row[column]        # else assign the value
             (thisStatus, newData) = self.decide(data)       # Make a decision about this row
 
             if (thisStatus != {}) and ('errors' in thisStatus):     # Handle errors
@@ -2171,6 +2180,12 @@ class DMN():
                         if not validityIsFixed and failed:
                             self.errors.append("Bad S-FEEL for validity '{}' for item '{!s}' in table '{!s}' for rule '{!s}'".format(testValidity, item, table, thisRule))
                         if not retVal:
+                            if isFixed and (variable in data):             # For this rule, the input must match a fixed value
+                                value = data[variable]
+                            else:
+                                (failed, value) = self.sfeel(item)
+                                if not validityIsFixed and failed:
+                                    self.errors.append("Bad S-FEEL for item '{!s}' in table '{!s}' for rule '{!s}'".format(item, table, thisRule))
                             message = 'Variable {!s} has S-FEEL input value {!s} which does not match input validity list {!s} for decision table {!s}'
                             self.errors.append(message.format(item, value, testValidity, table))
                             status = {}
