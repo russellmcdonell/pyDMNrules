@@ -22,8 +22,8 @@ copyright = '2020, Russell McDonell'
 author = 'Russell McDonell'
 
 # The full version, including alpha/beta/rc tags
-version = '1.2.5'
-release = '0.1.7'
+version = '1.3'
+release = '1.3.1'
 
 master_doc = 'index'
 

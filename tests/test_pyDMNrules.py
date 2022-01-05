@@ -2,6 +2,7 @@ import pyDMNrules
 from openpyxl import load_workbook
 import csv
 import pandas as pd
+import datetime
 
 class TestClass:
     def test_HPV1(self):
@@ -283,10 +284,10 @@ class TestClass:
 
     def test_AN_SNAP(self):
         '''
-        Check that the supplied AN-SNAP rules (DMN).xlsx workbook works
+        Check that the supplied AN-SNAP V4 rules (DMN).xlsx workbook works
         '''
         dmnRules = pyDMNrules.DMN()
-        status = dmnRules.load('../pyDMNrules/AN-SNAP rules (DMN).xlsx')
+        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 rules (DMN).xlsx')
         assert 'errors' not in status
         data = {}
         data['Multidisciplinary'] = False
@@ -678,7 +679,7 @@ class TestClass:
         Check AN-SNAP decision
         '''
         dmnRules = pyDMNrules.DMN()
-        status = dmnRules.load('../pyDMNrules/AN-SNAP rules (DMN).xlsx')
+        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 rules (DMN).xlsx')
         assert 'errors' not in status
         data = {}
         data['Multidisciplinary'] = False
@@ -753,7 +754,7 @@ class TestClass:
         Check AN-SNAP decision
         '''
         dmnRules = pyDMNrules.DMN()
-        status = dmnRules.load('../pyDMNrules/AN-SNAP rules (DMN).xlsx')
+        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 rules (DMN).xlsx')
         assert 'errors' not in status
         thisPatient = thisAdmission = None
         with open('../pyDMNrules/subAcuteExtract.csv', 'r', newline='') as csvInFile:
@@ -871,37 +872,1113 @@ class TestClass:
         Check AN-SNAP decision using Pandas DataFrames
         '''
         dmnRules = pyDMNrules.DMN()
-        status = dmnRules.load('../pyDMNrules/AN-SNAP rules (DMN).xlsx')
+        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 rules (DMN).xlsx')
         assert 'errors' not in status
-        dataTypes = {'Patient_Age':int, 'Episode_Length_of_stay':int, 'Phase_Length_of_stay':int,
-        'Phase_FIM_Motor_Score':int, 'Phase_FIM_Cognition_Score':int, 'Phase_RUG_ADL_Score':int,
-        'Phase_w01':float, 'Phase_NWAU21':float,
-        'Indigenous_Status':str, 'Care_Type':str, 'Funding_Source':str, 'Phase_Impairment_Code':str,
-        'AROC_code':str, 'Phase_AN_SNAP_V4_0_code':str,
-        'Same_day_addmitted_care':bool, 'Delerium_or_Dimentia':bool, 'RadioTherapy_Flag':bool, 'Dialysis_Flag':bool}
-        dates = ['BirthDate', 'Admission_Date', 'Discharge_Date', 'Phase_Start_Date', 'Phase_End_Date']
-        dfInput = pd.read_csv('../pyDMNrules/subAcuteExtract.csv', dtype=dataTypes, parse_dates=dates)
-        dfInput['Multidisciplinary'] = True
-        dfInput['Admitted_Flag'] = True
-        dfInput['Length_of_Stay'] = dfInput['Phase_Length_of_Stay']
-        dfInput['Long_term_care'] = False
-        dfInput.loc[dfInput['Length_of_Stay'] > 92, 'Long_term_care'] = True
-        dfInput['Same_day_admitted_care'] = False
-        dfInput['GEM_clinic'] = None
-        dfInput['Patient_Age_Type'] = None
-        dfInput['First_Phase'] = False
-        grouped = dfInput.groupby(['Patient_UR', 'Admission_Date'])
-        for index in grouped.head(1).index:
-            if dfInput.loc[index]['Phase_Type'] == 'Unstable':
-                dfInput.loc[index, 'First_Phase'] = True
-        columns = {'Admitted_Flag':'Admitted Flag', 'Care_Type':'Care Type', 'Length_of_Stay':'Length of Stay', 'Long_term_care':'Long term care',
-        'Same_day_admitted_care':'Same-day admitted care', 'GEM_clinic':'GEM clinic', 'Patient_Age':'Patient Age', 'Patient_Age_Type':'Patient Age Type',
-        'AROC_code':'AROC code', 'Delirium_of_Dimentia':'Delirium or Dimentia', 'Phase_Type':'Phase Type', 'First_Phase':'First Phase', 'Phase_FIM_Motor_Score':'FIM Motor score',
-        'Phase_FIM_Cognition_Score':'FIM Cognition score', 'Phase_RUG_ADL_Score':'RUG-ADL', 'Delirium_or_Dimentia':'Delirium or Dimentia',
-        'Problem_Severity_Scrore':'Problem Severity Score'}
-        (dfStatus, dfResults, dfDecision) = dmnRules.decidePandas(dfInput, headings=columns)
-        assert dfStatus.where(dfStatus == 'no errors').count() == dfStatus.count()
-        assert dfResults['AN_SNAP_V4_code'].count() == dfInput['Phase_AN_SNAP_V4_0_code'].count()
+        dfInput = pd.read_excel('../pyDMNrules/SubacuteExtract.xlsx')
+        dfInput['Long term care'] = False
+        dfInput.loc[dfInput['Length of Stay'] > 92, 'Long term care'] = True
+        dfInput['First Phase'] = False
+        thisPatient = thisPhaseStartDate = None
+        for index, row in dfInput.iterrows():
+            if ((row['Patient UR'] != thisPatient) or (row['Phase Start Date'] != thisPhaseStartDate)):
+                thisPatient = row['Patient UR']
+                thisPhaseStartDate = row['Phase Start Date']
+                if row['Phase Type'] == 'Unstable':
+                    dfInput.loc[index, 'First Phase'] = True
+        (dfStatus, dfResults, dfDecision) = dmnRules.decidePandas(dfInput)
+        for index, value in dfStatus.items():
+            assert value == 'no errors'
+        assert dfResults['AN-SNAP V4 code'].count() == dfInput['Expected AN-SNAP V4 code'].count()
         for index in dfResults.index:
-            assert dfResults.loc[index, 'AN_SNAP_V4_code'] == dfInput.loc[index, 'Phase_AN_SNAP_V4_0_code']
+            assert dfResults.loc[index, 'AN-SNAP V4 code'] == dfInput.loc[index, 'Expected AN-SNAP V4 code']
+
+    def test_is(self):
+        '''
+        Check is() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/Is1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Value1'] = 7
+        data['Input Value2'] = 9
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Value2'] = 'AAA'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Value1'] = 'abc'
+        data['Input Value2'] = 'DEF'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Value2'] = 7
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Value1'] = True
+        data['Input Value2'] = False
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Value2'] = 7
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Value1'] = '@"P2Y3M"'
+        data['Input Value2'] = '@"P5Y0M"'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Value2'] = 7
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Value1'] = datetime.timedelta(days=1, seconds=3000)
+        data['Input Value2'] = datetime.timedelta(days=3)
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Value2'] = 7
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Value1'] = datetime.time(hour=11, minute=3, second=19)
+        data['Input Value2'] = datetime.time(hour=1, minute=13, second=11)
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Value2'] = 7
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Value1'] = datetime.date(year=2021, month=9, day=15)
+        data['Input Value2'] = datetime.date(year=2020, month=3, day=7)
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Value2'] = 7
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Value1'] = datetime.datetime(year=2021, month=9, day=15, hour=15, minute=15, second=10)
+        data['Input Value2'] = datetime.datetime(year=2020, month=5, day=7, hour=11, minute=5, second=0)
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Value2'] = 7
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+
+    def test_beforeRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/Before1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = 1
+        data['Input Range2'] = 10
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 10
+        data['Input Range2'] = 1
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = 1
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = 1
+        data['Input Range2'] = ('(', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = 10
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 10, ')')
+        data['Input Range2'] = 10
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = 15
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 15, 20, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 10, 20, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 10, ')')
+        data['Input Range2'] = ('[', 10, 20, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('(', 10, 20, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+
+    def test_afterRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/After1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = 10
+        data['Input Range2'] = 5
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 5
+        data['Input Range2'] = 10
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = 12
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 10
+        data['Input Range2'] = ('(', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 10
+        data['Input Range2'] = ('(', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 11, 20, ')')
+        data['Input Range2'] = 12
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 11, 20, ']')
+        data['Input Range2'] = 10
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 11, 20, ']')
+        data['Input Range2'] = 11
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 11, 20, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 11, 20, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 11, 20, ']')
+        data['Input Range2'] = ('[', 1, 11, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 11, 20, ']')
+        data['Input Range2'] = ('[', 1, 11, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+
+    def test_meetsRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/Meets1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 5, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 5, ')')
+        data['Input Range2'] = ('[', 5, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('(', 5, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 6, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+
+    def test_metByRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/MetBy1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = ('[', 5, 10, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 5, 10, ']')
+        data['Input Range2'] = ('[', 1, 5, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('(', 5, 10, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 6, 10, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+
+    def test_overlapsRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/Overlaps1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 3, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 3, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 8, ']')
+        data['Input Range2'] = ('[', 3, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 3, 5, ']')
+        data['Input Range2'] = ('[', 1, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 6, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 6, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 5, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('(', 5, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ')')
+        data['Input Range2'] = ('[', 5, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ')')
+        data['Input Range2'] = ('(', 5, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 5, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 5, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 5, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('(', 5, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+
+    def test_overlapsBeforeRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/OverlapsBefore1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 3, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 6, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 5, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('(', 5, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ')')
+        data['Input Range2'] = ('(', 5, 8, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ')')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ')')
+        data['Input Range2'] = ('(', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('(', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 5, ')')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+
+    def test_overlapsAfterRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/OverlapsAfter1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = ('[', 3, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 6, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 5, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 5, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 5, 8, ']')
+        data['Input Range2'] = ('[', 1, 5, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('(', 1, 5, ']')
+        data['Input Range2'] = ('[', 1, 5, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 5, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 1, 5, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+
+    def test_finishesRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/Finishes1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = 10
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 10
+        data['Input Range2'] = ('[', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 5, 10, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 5, 10, ')')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 5, 10, ')')
+        data['Input Range2'] = ('[', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('(', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+
+    def test_includesRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/Includes1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = 5
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = 12
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = 1
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = 10
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 10, ']')
+        data['Input Range2'] = 1
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 10, ')')
+        data['Input Range2'] = 10
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 4, 6, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 10, ']')
+        data['Input Range2'] = ('(', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('(', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ')')
+        data['Input Range2'] = ('[', 5, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('(', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+
+    def test_duringRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/During1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = 5
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 12
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = 1
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 10
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 1
+        data['Input Range2'] = ('(', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = 10
+        data['Input Range2'] = ('[', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 4, 6, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 5, ']')
+        data['Input Range2'] = ('(', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 10, ')')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 5, 10, ')')
+        data['Input Range2'] = ('[', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ')')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+
+    def test_startsRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/Starts1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = 1
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 1
+        data['Input Range2'] = ('(', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = 2
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 5, ']')
+        data['Input Range2'] = ('(', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 5, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('(', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 10, ')')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ')')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 10, ')')
+        data['Input Range2'] = ('(', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+
+    def test_startedByRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/StartedBy1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = 1
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 10, ']')
+        data['Input Range2'] = 1
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = 2
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1,10, ']')
+        data['Input Range2'] = ('(', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('(', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('(', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 10, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('[', 1, 10, ']')
+        data['Input Range2'] = ('[', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 10, ')')
+        data['Input Range2'] = ('(', 1, 10, ')')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+
+    def test_coincidesRange(self):
+        '''
+        Check before() function
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/tests/Coincides1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Input Range1'] = 5
+        data['Input Range2'] = 5
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = 3
+        data['Input Range2'] = 4
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('[', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == True
+        data['Input Range1'] = ('(', 1, 5, ')')
+        data['Input Range2'] = ('(', 1, 5, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
+        data['Input Range1'] = ('[', 1, 5, ']')
+        data['Input Range2'] = ('(', 2, 6, ']')
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Output Value' in newData['Result']
+        assert newData['Result']['Output Value'] == False
 

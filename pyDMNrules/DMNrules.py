@@ -201,26 +201,49 @@ class DMN():
         # Check for the known two parameter FEEL functions that return True or False
         match = re.match(r'^starts with\((.*)\)$', thisTest)
         if not wasString and match is not None:           # if variable is a string, then check that it starts with this string
+            # Check that there is only a single parameter
             withString = match.group(1)
-            if withString[0] != '"':    # make sure the second arguement is a string
-                withString = '"' + withString
-            if withString[-1] != '"':
-                withString += '"'
-            if testIsNot:
-                return self.data2sfeel(coordinate, sheet, 'not(starts with(' + variable + ', ' + withString + '))', False)
+            parameters = []
+            try:
+                for row in csv.reader([withString], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if withString[0] != '"':    # make sure the second arguement is a string
+                    withString = '"' + withString
+                if withString[-1] != '"':
+                    withString += '"'
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(starts with(' + variable + ', ' + withString + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'starts with(' + variable + ', ' + withString + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
             else:
-                return self.data2sfeel(coordinate, sheet, 'starts with(' + variable + ', ' + withString + ')', False)
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
         match = re.match(r'^ends with\((.*)\)$', thisTest)
         if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
             withString = match.group(1)
-            if withString[0] != '"':    # make sure the second arguement is a string
-                withString = '"' + withString
-            if withString[-1] != '"':
-                withString += '"'
-            if testIsNot:
-                return self.data2sfeel(coordinate, sheet, 'not(ends with(' + variable + ', ' + withString + '))', False)
+            parameters = []
+            try:
+                for row in csv.reader([withString], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if withString[0] != '"':    # make sure the second arguement is a string
+                    withString = '"' + withString
+                if withString[-1] != '"':
+                    withString += '"'
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(ends with(' + variable + ', ' + withString + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'ends with(' + variable + ', ' + withString + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
             else:
-                return self.data2sfeel(coordinate, sheet, 'ends with(' + variable + ', ' + withString + ')', False)
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
         match = re.match(r'^list contains\((.*)\)$', thisTest)
         if not wasString and match is not None:           # if variable is a list, then check that it contains this element
             return self.data2sfeel(coordinate, sheet, 'list contains(' + variable + ', ' + match.group(1) + ')', False)
@@ -228,11 +251,12 @@ class DMN():
         match = re.match(r'^matches\((.*)\)$', thisTest)
         if not wasString and match is not None:
             # There can be one or two arguments
+            parameters = []
             try:
                 for row in csv.reader([match.group(1)], dialect=csv.excel, doublequote=False, escapechar='\\'):
                     parameters = list(row)
             except:
-                parameters = []
+                pass
             if (len(parameters) == 1) or (len(parameters) == 2):
                 if parameters[0][0] != '"':
                     parameters[0] = '"' + parameters[0]
@@ -248,6 +272,280 @@ class DMN():
                     return self.data2sfeel(coordinate, sheet, 'not(matches(' + variable + ', ' + parameters[0] + ', ' + parameters[1] + '))', False)
                 else:
                     return self.data2sfeel(coordinate, sheet, 'matches(' + variable + ', ' + parameters[0] + ', ' + parameters[1] + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^is\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            isValue = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([isValue], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(is(' + variable + ', ' + isValue + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'is(' + variable + ', ' + isValue + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^before\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(before(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'before(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^after\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(after(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'after(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^meets\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(meets(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'meets(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^met by\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(met by(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'met by(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^overlaps\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(overlaps(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'overlaps(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^overlaps before\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(overlaps before(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'overlaps before(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^overlaps after\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(overlaps after(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'overlaps after(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^finishes\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(finishes(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'finishes(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^finished by\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(finished by(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'finished by(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^includes\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(includes(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'includes(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^during\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(during(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'during(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                    return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^starts\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(starts(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'starts(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^started by\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(started by(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'started by(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^coincides\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it ends with this string
+            thisRange = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(coincides(' + variable + ', ' + thisRange + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'coincides(' + variable + ', ' + thisRange + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
 
         # Not a simple function.
         # So now we are trying to create an expression of 'variable' 'operator' 'test'
@@ -543,32 +841,11 @@ class DMN():
         elif isinstance(value, str):
             if len(value) == 0:
                 return '""'
-            at = 0                          # If Variable, or BusinessConcept.Attribute in string then
-            to = len(value)                 # Then leave it alone - it better be fully valid FEEL
-            while at < to:
-                if value[at] == '"':         # Start of a string - skip strings
-                    at += 1
-                    stringEnd = re.search(r'[^\\]"', value[at:])
-                    if stringEnd is None:     # Hum, unbounded string
-                        break
-                    at += stringEnd.end()
-                    continue
-                searchTo = value[at:].find('"')      # Stop searching at the next string
-                if searchTo == -1:
-                    searchTo = to
-                for variable in self.glossary:
-                    match = re.search(r'\b' + variable + r'\b', value[at:searchTo])
-                    if match is not None:
-                        return value
-                for item in self.glossaryItems:
-                    match = re.search(r'\b' + item + r'\b', value[at:searchTo])
-                    if match is not None:
-                        return value
-                at += searchTo
-            if (len(value) > 0) and (value[0] == '"') and (value[-1] == '"'):
-                return '"' + value[1:-1].replace('"', r'\"') + '"'
-            else:
-                return '"' + value.replace('"', r'\"') + '"'
+            if (value[:2] == '@"') and (value[-1] == '"'):      # Check for literal strings
+                    return value
+            if (value[0] == '"') and (value[-1] == '"'):       # Check for strings
+                    return value
+            return '"' + value.replace('"', r'\"') + '"'        # return as S-FEEL string
         elif isinstance(value, list):
             return self.list2sfeel(value)
         elif isinstance(value, dict):
@@ -588,10 +865,37 @@ class DMN():
             hours = duration % 24
             days = int(duration / 24)
             return 'P%dDT%dH%dM%dS' % (days, hours, mins, secs)
+        elif isinstance(value, tuple) and (len(value) == 4):
+            (end0, low0, high1, end1) = value
+            if isinstance(end0, str) and isinstance(end1, str) and (type(low0) == type(high1)):
+                if (end0 in ['(', '[', ']']) and (end1 in [')', '[', ']']) and (low0 <= high1):
+                    if isinstance(low0, str) or isinstance(low0, float) or isinstance(low0, int):
+                        return end0 + str(low0) + ' .. ' + str(high1) + end1
+                    elif isinstance(low0, datetime.date) or isinstance(low0, datetime.time):
+                        return end0 + low0.isoformat() + ' .. ' + high1.isoformat() + end1
+                    elif isinstance(low0, datetime.timedelta):
+                        duration = low0.total_seconds()
+                        secs = duration % 60
+                        duration = int(duration / 60)
+                        mins = duration % 60
+                        duration = int(duration / 60)
+                        hours = duration % 24
+                        days = int(duration / 24)
+                        low0 = 'P%dDT%dH%dM%dS' % (days, hours, mins, secs)
+                        duration = high1.total_seconds()
+                        secs = duration % 60
+                        duration = int(duration / 60)
+                        mins = duration % 60
+                        duration = int(duration / 60)
+                        hours = duration % 24
+                        days = int(duration / 24)
+                        high1 = 'P%dDT%dH%dM%dS' % (days, hours, mins, secs)
+                        return end0 + low0 + ' .. ' + high1 + end1
+            self.errors.append("Invalid Data '{!r}' - not a valid S-FEEL data type".format(value))
+            return None
         else:
             self.errors.append("Invalid Data '{!r}' - not a valid S-FEEL data type".format(value))
             return None
-
 
     def tableSize(self, cell):
         '''
@@ -1853,8 +2157,8 @@ class DMN():
             (failed, itemValue) = self.sfeel('{}'.format(foundItem))
             if failed:
                 self.errors.append("Bad S-FEEL when replacing variable '{}' with value".format(foundItem))
-            value = self.value2sfeel(itemValue)
-            newText += value
+            sFeelText = self.value2sfeel(itemValue)
+            newText += sFeelText
             at += foundLen                                          # And skip Variable
         return newText
 
@@ -2187,7 +2491,7 @@ class DMN():
                                 if not validityIsFixed and failed:
                                     self.errors.append("Bad S-FEEL for item '{!s}' in table '{!s}' for rule '{!s}'".format(item, table, thisRule))
                             message = 'Variable {!s} has S-FEEL input value {!s} which does not match input validity list {!s} for decision table {!s}'
-                            self.errors.append(message.format(item, value, testValidity, table))
+                            self.errors.append(message.format(item, repr(value), testValidity, table))
                             status = {}
                             status['errors'] = self.errors
                             self.errors = []
@@ -2226,13 +2530,9 @@ class DMN():
                                     if isFixed:
                                         result = fixedValue
                                     else:
-                                        (failed, thisResult) = self.sfeel('{}'.format(item))
+                                        (failed, result) = self.sfeel('{}'.format(item))
                                         if failed:
                                             self.errors.append("Bad S-FEEL fetching value for ranking for item '{}' in table '{!s}' for rule '{!s}'".format(item, table, thisRule))
-                                        result = self.value2sfeel(thisResult)
-                                    if isinstance(result, str):
-                                        if (len(result) > 0) and (result[0] == '"') and (result[-1] == '"'):
-                                            result = result[1:-1]
                                     if result in self.decisionTables[table]['outputValidity'][outputIndex]:
                                         rank = self.decisionTables[table]['outputValidity'][outputIndex].index(result)
                                     else:
@@ -2255,13 +2555,9 @@ class DMN():
                                         if isFixed:
                                             result = fixedValue
                                         else:
-                                            (failed, thisResult) = self.sfeel('{}'.format(item))
+                                            (failed, result) = self.sfeel('{}'.format(item))
                                             if failed:
                                                 self.errors.append("Bad S-FEEL fetching value for ranking for item'{}' in table '{!s}' for rule '{!s}'".format(item), table, thisRule)
-                                            result = self.value2sfeel(thisResult)
-                                        if isinstance(result, str):
-                                            if (len(result) > 0) and (result[0] == '"') and (result[-1] == '"'):
-                                                result = result[1:-1]
                                         if result in self.decisionTables[table]['outputValidity'][outputIndex]:
                                             rank = self.decisionTables[table]['outputValidity'][outputIndex].index(result)
                                         else:

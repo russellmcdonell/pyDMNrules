@@ -1,3 +1,17 @@
+### 1.3.1 Added DMN 1.3 support
+* Added support for the new DMN 1.3 built-in functions
+    - is() and the Range comparison functions
+* Added support for passing ranges as input values
+    - ranges are passed as tuples of (end0, low0, high1, end1)    
+    where end0 must be one of '(', '[' or ']' and end1 must be one of ')', ']', '['    
+    and low0 and high1 must be the same data type, and a valid data type for conversion to FEEL
+* Added support for passing string litterals (@"xxx") as input values
+* pyDMNrules also inherits from pySFeel and there have been a number of enhancements to pySFeel
+    - Support for literal strings (@"xxx") for dates/times/date-times/durations
+    - Support for @region/location timezones for times and date-times
+    - Support for attributes for date/times/date-times/durations/ranges    
+    @"2021-12-2".year returns 2021
+    - Plus some bug fixes
 ### 1.2.8 - Bug fixed
 * fixed error message when failing input validity
 * fixed error when a Pandas dataframe has invalid column names
