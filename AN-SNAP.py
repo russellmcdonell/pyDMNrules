@@ -3,7 +3,7 @@ import pyDMNrules
 
 if __name__ == '__main__':
     dmnRules = pyDMNrules.DMN()
-    status = dmnRules.load('../pyDMNrules/AN-SNAP rules (DMN).xlsx')
+    status = dmnRules.load('../pyDMNrules/AN-SNAP V4 rules (DMN).xlsx')
     if 'errors' in status:
         print('AN-SNAP rules (DMN).xlsx has errors', status['errors'])
         sys.exit(0)

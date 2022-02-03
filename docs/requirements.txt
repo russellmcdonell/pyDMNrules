@@ -1,4 +1,5 @@
 datetime
+copy
 pySFeel>1.3
 openpyxl
 pandas

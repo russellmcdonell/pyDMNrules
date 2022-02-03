@@ -7,7 +7,7 @@ import datetime
 class TestClass:
     def test_HPV1(self):
         '''
-        Check that the supplied ExampleHPv.xlsx workbook works
+        Check that the supplied ExampleHPV.xlsx workbook works
         '''
         dmnRules = pyDMNrules.DMN()
         status = dmnRules.load('../pyDMNrules/ExampleHPV.xlsx')
@@ -34,7 +34,7 @@ class TestClass:
 
     def test_HPV2(self):
         '''
-        Check that the supplied ExampleHPv.xlsx workbook works when loaded and passed as a workbook
+        Check that the supplied ExampleHPV.xlsx workbook works when loaded and passed as a workbook
         '''
         dmnRules = pyDMNrules.DMN()
         wb = load_workbook(filename='../pyDMNrules/ExampleHPV.xlsx')
@@ -94,7 +94,7 @@ class TestClass:
         assert 'Warning' in results[1]['newData']['Result']
         assert results[1]['newData']['Result']['Warning'] is None
         assert 'Error Message' in results[0]['newData']['Result']
-        assert results[0]['newData']['Result']['Error Message'] is None
+        assert results[1]['newData']['Result']['Error Message'] is None
         assert 'Result' in results[2]['newData']
         assert 'Encounter Diagnosis' in results[2]['newData']['Result']
         assert results[2]['newData']['Result']['Encounter Diagnosis'] == 'Diabetes'
@@ -284,10 +284,10 @@ class TestClass:
 
     def test_AN_SNAP(self):
         '''
-        Check that the supplied AN-SNAP V4 rules (DMN).xlsx workbook works
+        Check that the supplied AN-SNAP V4 grouper (DMN).xlsx workbook works
         '''
         dmnRules = pyDMNrules.DMN()
-        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 rules (DMN).xlsx')
+        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 grouper (DMN).xlsx')
         assert 'errors' not in status
         data = {}
         data['Multidisciplinary'] = False
@@ -679,7 +679,7 @@ class TestClass:
         Check AN-SNAP decision
         '''
         dmnRules = pyDMNrules.DMN()
-        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 rules (DMN).xlsx')
+        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 grouper (DMN).xlsx')
         assert 'errors' not in status
         data = {}
         data['Multidisciplinary'] = False
@@ -754,7 +754,7 @@ class TestClass:
         Check AN-SNAP decision
         '''
         dmnRules = pyDMNrules.DMN()
-        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 rules (DMN).xlsx')
+        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 grouper (DMN).xlsx')
         assert 'errors' not in status
         thisPatient = thisAdmission = None
         with open('../pyDMNrules/subAcuteExtract.csv', 'r', newline='') as csvInFile:
@@ -781,46 +781,38 @@ class TestClass:
                     elif row[col] == 'null':
                         row[col] = None
                 data = {}
-                data['Multidisciplinary'] = True
-                data['Admitted Flag'] = True
-                data['Care Type'] = row['Care_Type']
-                LOS = int(float(row['Phase_Length_of_Stay']))
-                data['Length of Stay'] = LOS
-                if LOS >= 92:
+                for col in ['Multidisciplinary', 'Admitted Flag', 'Care Type', 'Same-day admitted care', 'GEM clinic',
+                            'Patient Age Type', 'AROC code', 'Delirium or Dimentia', 'Phase Type']:
+                    data[col] = row[col]
+                for col in ['Length of Stay', 'Patient Age', 'FIM Motor score', 'FIM Cognition score', 'RUG-ADL']:
+                    data[col] = int(float(row[col]))
+                if data['Length of Stay'] >= 92:
                     data['Long term care'] = True
                 else:
                     data['Long term care'] = False
-                data['Same-day admitted care'] = row['Same_day_admitted_care']
-                data['GEM clinic'] = None                       # Required for non-admitted GEM AN-SNAP. No non-admitted GEM records
-                data['Patient Age'] = int(float(row['Patient_Age']))
-                data['Patient Age Type'] = None
-                data['AROC code'] = row['AROC_code']
-                data['FIM Motor score'] = int(float(row['Phase_FIM_Motor_Score']))
-                data['FIM Cognition score'] = int(float(row['Phase_FIM_Cognition_Score']))
-                data['Delirium or Dimentia'] = row['Delirium_or_Dimentia']
-                data['Phase Type'] = row['Phase_Type']
-                if ((row['Patient_UR'] != thisPatient) or (row['Admission_Date'] != thisAdmission)):
-                    thisPatient = row['Patient_UR']
-                    thisAdmission = row['Admission_Date']
-                    if row['Phase_Type'] == 'Unstable':
+                if ((row['Patient UR'] != thisPatient) or (row['Episode Start Date'] != thisAdmission)):
+                    thisPatient = row['Patient UR']
+                    thisAdmission = row['Episode Start Date']
+                    if row['Phase Type'] == 'Unstable':
                         data['First Phase'] = True
                     else:
                         data['First Phase'] = False
                 else:
                     data['First Phase'] = False
-                data['RUG-ADL'] = int(float(row['Phase_RUG_ADL_Score']))
                 (status, newData) = dmnRules.decide(data)        
                 assert isinstance(newData, list)
+                for i in range(len(status)):
+                    assert 'errors' not in status[i]
                 assert 'Result' in newData[-1]
                 assert 'AN-SNAP V4 code' in newData[-1]['Result']
-                assert newData[-1]['Result']['AN-SNAP V4 code'] == row['Phase_AN_SNAP_V4_0_code']
+                assert newData[-1]['Result']['AN-SNAP V4 code'] == row['Expected AN-SNAP V4 code']
 
     def test_testANWU21(self):
         '''
         Check ANWU21 decision
         '''
         dmnRules = pyDMNrules.DMN()
-        status = dmnRules.load('../pyDMNrules/Subacute NWAU calculator (DMN).xlsx')
+        status = dmnRules.load('../pyDMNrules/Subacute NWAU21 calculator (DMN).xlsx')
         assert 'errors' not in status
         thisPatient = thisAdmission = None
         with open('../pyDMNrules/subAcuteExtract.csv', 'r', newline='') as csvInFile:
@@ -847,42 +839,37 @@ class TestClass:
                     elif row[col] == 'null':
                         row[col] = None
                 data = {}
-                data['Care Type'] = row['Care_Type']
-                data['LOS'] = int(float(row['Phase_Length_of_Stay']))
-                data['Same Day Admission'] = row['Same_day_admitted_care']
-                data['Patient Age'] = row['Patient_Age']
-                data['AN-SNAP V4.0'] = row['Phase_AN_SNAP_V4_0_code']
-                data['Care Type'] = row['Care_Type']
-                data['Hospital Remoteness'] = '0'           # Hospital is not remote
-                data['Postcode'] = row['Postcode']
-                data['SA2'] = None                          # Addresses are not geocoded
-                data['Dialysis Flag'] = row['Dialysis_Flag']
-                data['RadioTherapy Flag'] = row['RadioTherapy_Flag']
-                data['Funding Source'] = row['Funding_Source']
-                data['Indigenous Status'] = row['Indigenous_Status']
-                data['State'] = '2'                         # Funded by DHHS Victoria
+                for col in ['Care Type', 'Hospital Remoteness', 'Postcode', 'SA2',
+                            'Dialysis Flag', 'RadioTherapy Flag', 'Funding Source', 'Indigenous Status', 'State']:
+                    data[col] = row[col]
+                data['Same Day Admission'] = row['Same-day admitted care']
+                data['AN-SNAP V4.0'] = row['Expected AN-SNAP V4 code']
+                for col in ['Length of Stay', 'Patient Age']:
+                    data[col] = int(float(row[col]))
                 (status, newData) = dmnRules.decide(data)
                 assert isinstance(newData, list)
+                for i in range(len(status)):
+                    assert 'errors' not in status[i]
                 assert 'Result' in newData[-1]
                 assert 'NWAU21' in newData[-1]['Result']
-                assert (int(newData[-1]['Result']['NWAU21'] * 10000.0 + 0.5) / 10000.0) == (int(float(row['Phase_NWAU21']) * 10000.0 + 0.5) / 10000.0)
+                assert (int(newData[-1]['Result']['NWAU21'] * 10000.0 + 0.5) / 10000.0) == (int(float(row['Expected NWAU21']) * 10000.0 + 0.5) / 10000.0)
 
     def test_testANSNAPpandas(self):
         '''
         Check AN-SNAP decision using Pandas DataFrames
         '''
         dmnRules = pyDMNrules.DMN()
-        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 rules (DMN).xlsx')
+        status = dmnRules.load('../pyDMNrules/AN-SNAP V4 grouper (DMN).xlsx')
         assert 'errors' not in status
         dfInput = pd.read_excel('../pyDMNrules/SubacuteExtract.xlsx')
         dfInput['Long term care'] = False
         dfInput.loc[dfInput['Length of Stay'] > 92, 'Long term care'] = True
         dfInput['First Phase'] = False
-        thisPatient = thisPhaseStartDate = None
+        thisPatient = thisEpisode = None
         for index, row in dfInput.iterrows():
-            if ((row['Patient UR'] != thisPatient) or (row['Phase Start Date'] != thisPhaseStartDate)):
+            if ((row['Patient UR'] != thisPatient) or (row['Episode Start Date'] != thisEpisode)):
                 thisPatient = row['Patient UR']
-                thisPhaseStartDate = row['Phase Start Date']
+                thisEpisode = row['Episode Start Date']
                 if row['Phase Type'] == 'Unstable':
                     dfInput.loc[index, 'First Phase'] = True
         (dfStatus, dfResults, dfDecision) = dmnRules.decidePandas(dfInput)
@@ -1981,4 +1968,174 @@ class TestClass:
         assert 'Result' in newData
         assert 'Output Value' in newData['Result']
         assert newData['Result']['Output Value'] == False
+
+    def test_HPV3(self):
+        '''
+        Check that the supplied ExampleHPVnoGlossary.xlsx workbook works
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/ExampleHPVnoGlossary.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Participant Age'] = 36
+        data['In Test of Cure'] = True
+        data['Hysterectomy Flag'] = False
+        data['Cancer Flag'] = False
+        data['HPV-V'] = 'V0'
+        data['Current Participant Risk Category'] = 'low'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert 'Result' in newData
+        assert 'Executed Rule' in newData
+        assert 'Test Risk Code' in newData['Result']
+        assert newData['Result']['Test Risk Code'] == 'L'
+        assert 'New Participant Risk Category' in newData['Result']
+        assert newData['Result']['New Participant Risk Category'] == 'low'
+        assert 'Participant Care Pathway' in newData['Result']
+        assert newData['Result']['Participant Care Pathway'] == 'toBeDetermined'
+        assert 'Next Rule' in newData['Result']
+        assert newData['Result']['Next Rule'] == 'CervicalRisk2'
+        (testStatus, results) = dmnRules.test()
+        assert 'errors' not in testStatus
+        assert len(results) == 26
+        for i in range(len(results)):
+            assert 'Mismatches' not in results[i]
+
+    def test_ExecuteRows(self):
+        '''
+        Check that the supplied ExampleExecuteRows1.xlsx workbook works
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/ExampleExecuteByRows1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Patient Birthdate'] = datetime.date(year=1952, month=11, day=11)
+        data['Admission Date'] = datetime.date(year=2021, month=1, day=16)
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert decision == 'Determine Patient Age Group'
+        assert table == 'Patient Age Group'
+        assert rule == '1'
+        assert newData[-1]['Result']['Age Group'] == 13
+        assert newData[-1]['Result']['Computed Patient Age'] == 69
+
+    def test_ExecuteColumns(self):
+        '''
+        Check that the supplied ExampleExecuteColumns1.xlsx workbook works
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/ExampleExecuteByColumns1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Patient Birthdate'] = datetime.date(year=1952, month=11, day=11)
+        data['Admission Date'] = datetime.date(year=2021, month=1, day=16)
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert decision == 'Determine Patient Age Group'
+        assert table == 'Patient Age Group'
+        assert rule == '1'
+        assert newData[-1]['Result']['Age Group'] == 13
+        assert newData[-1]['Result']['Computed Patient Age'] == 69
+
+    def test_ExecuteCrossTabs(self):
+        '''
+        Check that the supplied ExampleExecuteCrosstab1.xlsx workbook works
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/ExampleExecuteCrosstab1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Patient Birthdate'] = datetime.date(year=1952, month=11, day=11)
+        data['Admission Date'] = datetime.date(year=2021, month=1, day=16)
+        data['Admission Weight'] = 125
+        data['Discharge Weight'] = 115.5
+        data['want Age'] = True
+        data['want Weight Loss'] = False
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert decision == 'Determine Answers'
+        assert table == 'Do As You Are Told'
+        assert rule == '2:1'
+        assert len(newData) == 2
+        assert 'Result' in newData[-1]
+        assert 'Computed Patient Age' in newData[-1]['Result']
+        assert newData[-1]['Result']['Computed Patient Age'] == 69
+        assert 'Computed Weight Loss' in newData[-1]['Result']
+        assert newData[-1]['Result']['Computed Weight Loss'] == None
+        data['want Age'] = False
+        data['want Weight Loss'] = True
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert decision == 'Determine Answers'
+        assert table == 'Do As You Are Told'
+        assert rule == '1:2'
+        assert len(newData) == 2
+        assert 'Result' in newData[-1]
+        assert 'Computed Patient Age' in newData[-1]['Result']
+        assert newData[-1]['Result']['Computed Patient Age'] == None
+        assert 'Computed Weight Loss' in newData[-1]['Result']
+        assert newData[-1]['Result']['Computed Weight Loss'] == 9.5
+        data['want Age'] = True
+        data['want Weight Loss'] = True
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert decision == 'Determine Answers'
+        assert table == 'Do As You Are Told'
+        assert rule == '2:2'
+        assert len(newData) == 4
+        assert 'Result' in newData[-1]
+        assert 'Computed Patient Age' in newData[-1]['Result']
+        assert newData[-1]['Result']['Computed Patient Age'] == 69
+        assert 'Computed Weight Loss' in newData[-1]['Result']
+        assert newData[-1]['Result']['Computed Weight Loss'] == 9.5
+        data['want Age'] = False
+        data['want Weight Loss'] = False
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list) == False
+        (decision, table, rule) = newData['Executed Rule']
+        assert decision == 'Determine Answers'
+        assert table == 'Do As You Are Told'
+        assert rule == '1:1'
+        assert 'Result' in newData
+        assert 'Computed Patient Age' in newData['Result']
+        assert newData['Result']['Computed Patient Age'] == None
+        assert 'Computed Weight Loss' in newData['Result']
+        assert newData['Result']['Computed Weight Loss'] == None
+
+    def test_ExecuteInterest(self):
+        '''
+        Check that the supplied ExampleExecuteInterest1.xlsx workbook works
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/ExampleExecuteInterest1.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Years'] = 10
+        data['Interest'] = 0.03
+        data['Price'] = 125
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert decision == 'Determine Compound Interest'
+        assert table == 'Compute Interest'
+        assert rule == '1'
+        assert len(newData) == 11
+        assert 'Result' in newData[-1]
+        assert 'Price' in newData[-1]['Result']
+        assert newData[-1]['Result']['Price'] == 167.98954741801523
+        data['Years'] = 110
+        data['Interest'] = 0.003
+        data['Price'] = 125
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' in status
 

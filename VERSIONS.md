@@ -1,3 +1,13 @@
+### 1.3.4 Made Glossary optional - Added rules within rules functionality
+* Changed test for Rules as Rows/Rules as Columns/CrossTab Rules (removed dependency on Glossary)
+* Added glossary validation for output and inputs for CrossTab Rules (must be in provided glossary or valid for assembled glossary)
+* Reserved the output Variable name 'Execute'.
+    - Output cells for the 'Execute' output Variable must contain the name of a decision table
+    - The named decision table will invoked/run/executed when the associated rule is triggered
+    - Execution of the named decision table will occur when, normally, a value would have been assigned to the 'Execute' output variable
+    - Outputs from the named decision table may overwrite outputs already assigned as part of the current rule
+    - Outputs for the current rule, assigned after the named decision table has been invoked/run/execute may overwrite outputs from the named decsion table
+    - A decision table can invode/run/execute itself, but there is a recursion limit of 100 - to prevent runaway rules
 ### 1.3.1 Added DMN 1.3 support
 * Added support for the new DMN 1.3 built-in functions
     - is() and the Range comparison functions

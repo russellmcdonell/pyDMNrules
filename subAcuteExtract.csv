@@ -1,7 +1,7 @@
-Patient_UR,BirthDate,Patient_Age,Postcode,Indigenous_Status,Care_Type,Funding_Source,Same_day_admitted_care,Admission_Date,Discharge_Date,Episode_Length_of_Stay,Delirium_or_Dimentia,Phase_Start_Date,Phase_End_Date,Phase_Type,Phase_Length_of_Stay,AROC_code,Phase_FIM_Motor_Score,Phase_FIM_Cognition_Score,Phase_RUG_ADL_Score,Phase_AN_SNAP_V4_0_code,Phase_w01,RadioTherapy_Flag,Dialysis_Flag,Phase_NWAU21
-UR9910445,15/02/1946,71,3001,4,GEM,1,FALSE,15/05/2017,6/06/2017,22,FALSE,15/05/2017,6/06/2017,GEM,22,N/A,26,31,0,4CM2,3.392,FALSE,FALSE,3.392
-UR9854961,5/11/1941,75,3001,4,Palliative Care,1,FALSE,18/02/2017,19/02/2017,1,FALSE,18/02/2017,19/02/2017,Terminal,1,N/A,0,0,18,4BT1,0.5465,FALSE,FALSE,0.5465
-UR9973791,23/07/1968,48,3001,4,Rehabilitation,1,FALSE,3/03/2017,16/03/2017,13,FALSE,3/03/2017,16/03/2017,Rehabilitation,13,13,74,35,0,4A91,2.8343,FALSE,FALSE,2.8343
-UR9984649,31/01/1940,76,3001,4,Palliative Care,1,FALSE,12/01/2017,16/01/2017,4,FALSE,12/01/2017,14/01/2017,Unstable,2,N/A,0,0,15,4BU2,0.4599,FALSE,FALSE,0.4599
-UR9984649,31/01/1940,76,3001,4,Palliative Care,1,FALSE,12/01/2017,16/01/2017,4,FALSE,14/01/2017,15/01/2017,Deteriorating,1,N/A,0,0,18,4BD2,0.4589,FALSE,FALSE,0.4589
-UR9984649,31/01/1940,76,3001,4,Palliative Care,1,FALSE,12/01/2017,16/01/2017,4,FALSE,15/01/2017,16/01/2017,Terminal,1,N/A,0,0,18,4BT1,0.5465,FALSE,FALSE,0.5465
+Patient UR,Episode Start Date,Admitted Flag,Care Type,Length of Stay,Same-day admitted care,Multidisciplinary,GEM clinic,Patient Age,Patient Age Type,AROC code,FIM Motor score,FIM Cognition score,Delirium or Dimentia,Single Day of Care,Ongoing Pain,Clinic,Phase Type,Problem Severity Score,HoNOS 65 + ADL,HoNOS 65 + Total,Focus of Care,Overactive Behaviour,RUG-ADL,Assessment Only,Expected AN-SNAP V4 code,Hospital Remoteness,Postcode,SA2,RadioTherapy Flag,Dialysis Flag,Funding Source,Indigenous Status,State,Expected NWAU21
+UR9910445,15/05/2017,TRUE,GEM,22,FALSE,TRUE,,71,,,26,31,FALSE,,,,GEM,,,,,,0,,4CM2,0,3152,,FALSE,FALSE,1,4,2,3.392
+UR9854961,18/02/2017,TRUE,Palliative Care,1,FALSE,TRUE,,75,,,0,0,FALSE,,,,Terminal,,,,,,18,,4BT1,0,3166,,FALSE,FALSE,1,4,2,0.5465
+UR9973791,3/03/2017,TRUE,Rehabilitation,13,FALSE,TRUE,,48,,"""13""",74,35,FALSE,,,,Rehabilitation,,,,,,0,,4A91,0,3130,,FALSE,FALSE,1,4,2,2.8343
+UR9984649,12/01/2017,TRUE,Palliative Care,2,FALSE,TRUE,,76,,,0,0,FALSE,,,,Unstable,,,,,,15,,4BU2,0,3015,,FALSE,FALSE,1,4,2,0.4599
+UR9984649,12/01/2017,TRUE,Palliative Care,1,FALSE,TRUE,,76,,,0,0,FALSE,,,,Deteriorating,,,,,,18,,4BD2,0,3045,,FALSE,FALSE,1,4,2,0.4589
+UR9984649,12/01/2017,TRUE,Palliative Care,1,FALSE,TRUE,,76,,,0,0,FALSE,,,,Terminal,,,,,,18,,4BT1,0,3023,,FALSE,FALSE,1,4,2,0.5465

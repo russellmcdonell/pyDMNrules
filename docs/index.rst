@@ -103,14 +103,28 @@ being the 'Business Concept' and the 'Attibute' concateneted with the period cha
 That is, 'Patient Age' is valid and will return the current value of 'Patient.age' from the Glossary, but 'Patient Age + 5' is not.
 Instead you will need to use the syntax 'Patient.age + 5'
 
+The 'Execute' Output Variable
++++++++++++++++++++++++++++++
+The output variable named 'Execute' is reserved - it has a special meaning in pyDMNrules. A DMNrules table can have one or more output columns/rows
+with the output variable name of 'Execute'. A crosstab DMNrules table can have 'Execute' as the name of it's output variable. Any cell associated with
+an 'Execute' output variable must be the name of a DMNrules table. When a rule in a DMNrules table is triggered, and output values are being assigned,
+no value will be assigned to any 'Execute' output variable.
+Instead, when it it time to assign a value, the named DMNrules table will be invoked/run/executed. In effect, all the outputs from the name DMNrules table become
+the output(s) for this output cell. Thus, you can have rules, within rules, within rules etc. A DMNrules table can even invoke/run/execute itself, although there
+is a recursion limit of 100. However, you can have two identical tables, with different names, that call each other. Thus increasing the recursion limit to 200.
+The recursion limit is not meant as an inhibitor, but rather as a safety factor to prevent runaway rules.
+
 Strings and Numbers
 +++++++++++++++++++
 DMN uses a loosely typed language (S-FEEL). Python is a loosely typed language making Python a good fit for DMN.
 pyDMNrules will attempt to interpret an Excel cell containing a string as a number, if it can,
-but will revert back to treating it as a string if it cannot. Generally speaking this means that you can type up you Excel worksheets
+but will revert back to treating it as a string if it cannot. Generally speaking this means that you can create your Excel worksheets
 without having to be too careful. However some coding systems use numbers as codes, such as 'M-Male/F-Female/9-Unknown'.
-When using code sets that have numbers as codes, alway pass them a string to pyDMNrule
-and always enter them with enclosing double quotes in our Excel worksheet 'M-Male/F-Female/"9"-Unknown'.
+When using code sets that have numbers as codes, or codes that start with a number, alway pass them a string to pyDMNrules
+and always enter them with enclosing double quotes in your Excel worksheet 'M-Male/F-Female/"9"-Unknown'.    
+
+Similarly, code that begin with 'P' could be misinterpreted as 'durations' (P42D is a duration of '42 days' in FEEL).
+Again, these codes should always enclosed in double quotes in your Excel worksheet.
 
 Usage
 -----

@@ -5,11 +5,11 @@ A script to compute AN-SNAP version 4 codes for a batch of Subacute episodes.
 
 
 SYNOPSIS
-$ python3 AN-SNAPgrouper.py
+$ python3 AN-SNAP_V4_grouper.py
 
 REQUIRED
 inFilename
-The name of the Excel workbook of episode data (with headers)
+The name of the Excel workbook of subacute episode data (with headers)
 
 outFilename
 The name of the output Excel workbook
@@ -50,7 +50,7 @@ Then process the file, named in the command line
 
     # Create the AN-SNAP version 4 grouper
     SNAPdmnRules = pyDMNrules.DMN()
-    status = SNAPdmnRules.load('AN-SNAP V4 rules (DMN).xlsx')
+    status = SNAPdmnRules.load('AN-SNAP V4 grouper (DMN).xlsx')
     if status != {}:
         print(status)
         sys.exit(0)
@@ -60,7 +60,7 @@ Then process the file, named in the command line
 
     # Assemble the Episode data - Admitted Flag, Care Type, Length of Stay, Same-day admitted care, Multidisciplinary and GEM clinic are in the extract
     dfInput['Long term care'] = False
-    dfInput.loc[dfInput['Length of Stay'] >= 92] = True
+    dfInput.loc[dfInput['Length of Stay'] >= 92, 'Long term care'] = True
     # Assemble the Patient data - Patient Age is in the extract. Patient Age Type is computed
     # Assemble the Rehab_and_nonAcute data - AROC code is in the extract
     # Assemble the Rehab_and_GEM data - FIM Motor score and FIM Cognition score are in the extract
@@ -68,11 +68,11 @@ Then process the file, named in the command line
     # Assemble the GEM_non_admitted data - Single Day of Care, Ongoing Pain and Clinic are in the extract
     # Assemble the PalliativeCare data - Phase Type is in the extract
     dfInput['First Phase'] = False
-    thisPatient = thisPhaseStartDate = None
+    thisPatient = thisEpisodeStartDate = None
     for index, row in dfInput.iterrows():
-        if ((row['Patient UR'] != thisPatient) or (row['Phase Start Date'] != thisPhaseStartDate)):
+        if ((row['Patient UR'] != thisPatient) or (row['Episode Start Date'] != thisEpisodeStartDate)):
             thisPatient = row['Patient UR']
-            thisPhaseStartDate = row['Phase Start Date']
+            thisEpisodeStartDate = row['Episode Start Date']
             if row['Phase Type'] == 'Unstable':
                 dfInput.loc[index, 'First Phase'] = True
     # Assemble the Psychogeriatric data - HoNOS 65+ ADL, HoNOS 65 + Total, Focus of Care and Overactive Behaviour are in the extract
@@ -87,4 +87,5 @@ Then process the file, named in the command line
             sys.exit(0)
 
     # Save the output
-    dfResults.to_excel(outFilename, index=False)
+    dfOutput = pd.concat([dfInput, dfResults], axis=1)
+    dfOutput.to_excel(outFilename, index=False)

@@ -5,16 +5,26 @@ DMN rules are read from an Excel workbook.
 Then data, matching the input variables in the DMN rules is passed to the decide() function.
 The returned data contains the decision.
 
-The passed Excel workbook must contain the two tabs 'Glossary' and 'Decision'.
+The passed Excel workbook must contain a 'Decision' tab and may contain a 'Glossary' tab.
 Other tabs contain as many DMN rules tables as necessary.
-## Glossary
+
+## Glossary - optional
 The 'Glossary' tab must contain a table headed 'Glossary'.
-This table must have exactly three columns with the headings 'Variable', 'Business Concept' and 'Attribute'.
-The data in these three columns describe the inputs and outputs associated with the 'Decision'.
-'Variable' can be any text and is used to pass data to and from pyDMNrules.
-'Business Concept' and 'Attribute' must be valid S-FEEL names, but may **not** contain the dot, or period character. Vertically merged cells in the 'Business Concept' column are used to group multiple 'Variable'/'Attribute' pairs together into a single 'Businss Concept'. The 'Glossary' cannot have any Annotations.
+A 'Glossary' table lets the user add additional documentation/clarification to the input and output data.
+Data items can be grouped in to Business Concepts to better document where inputs come from and where outputs will be going to.
+The 'Glossary' table must have exactly three columns with the headings 'Variable', 'Business Concept' and 'Attribute'.
+The data in these three columns describe the inputs and outputs associated with the 'Decision'.  
+
+'Variable' can be any text and is used to pass data to and from pyDMNrules.  
+NOTE: the name 'Execute' is a reserved name and cannot be used as a Variable name. The name 'Execute' is reserved as the a heading for output columns, output rows or the output variable for a Cross Tabs decision table. The output value in an 'Execute' output column, 'Execute' output row or 'Execute' Cross Tabs decision table must be the name of a Decision Table which will be invoked when the matching rule is triggered. If the output value in an 'Execute' output column, an 'Execute' output row is missing or an output cell in an 'Execute' Cross Tabs decision table, then no Decision Table will be invoked whe the matching rule is triggered.
+
+'Business Concept' and 'Attribute' must be valid FEEL names as the 'Variable' will be mapped to a Glossary item created by joining these two FEEL names with a period character, as in 'Order.orderSize'.  
+Vertically merged cells in the 'Business Concept' column are used to group multiple 'Variable'/'Attribute' pairs together into a single 'Businss Concept'.  
+The 'Glossary' can have multiple columns of Annotations to describe things like data types, valid values etc.
 
 Items in the Glossary can be outputs of one decision table and inputs in the next decision table, which makes it easy to support complex business models.
+
+Input decision cells and Output cells can refer to input and output values either by their 'Variable' name, or by their Glossary item (FeeL) name, of 'BusinessConcept.Attribute'
 
 |   Glossary   |                      |               |
 |--------------|----------------------|---------------|
@@ -23,6 +33,14 @@ Items in the Glossary can be outputs of one decision table and inputs in the nex
 |   OrderSize  |   Order              |   orderSize   |
 |   Delivery   |                      |   delivery    |
 |   Discount   |   Discount           |   discount    |
+
+If a 'Glossary' tab is not present - if no Glossary is supplied, then pyDMNrules will create one using the input and output headings.
+There will be a single 'Business Concept' called 'Data'.
+Attributes will be created by replacing any space characters (' ') with an underscore character ('_') and then removing all **invalid** FEEL name characters.
+This can cause conflicts. For instance ':' is a valid character in a Variable, but not in a FEEL name.
+If there are two Varibles, being 'C' and 'C:' then both will be transformed to an Attribute of 'C' and a Glossary item of 'Data.C', which will be ambiguous.
+This ambiguity can be avoided by supplying a 'Glossary' and explicitely mapping 'C:' to a valid FEEL name, such as 'Ccolon'.
+
 ## Decision
 The 'Decision' tab must contain a table headed 'Decision' with the headings 'Decisions' and 'Execute Decision Table'.
 The 'Decisions' column contain a brief description of the DMN rules table which is named in 'Execute Decision Table' column. pyDMNrules will execute each decision table in this order. The 'Decision' table can have Annotations.
@@ -32,9 +50,11 @@ The 'Decisions' column contain a brief description of the DMN rules table which 
 | **Decisions**      | **Execute Decision Table** |
 | Determine Discount | Discount                   |
 
-The Decision table can be preceded by 'Input' columns.
-- The headings of each 'Input' column must be a Variable from the Glossary. 
-- The cells under each input heading are input test cells containing an expression about the input Variable, and which must evalutate to True, or False, depending upon the value of the input Variable. These inputs can be used to control the flow, that is, which Decision tables are run and which ones are skipped.
+The Decision table can have 'Input' columns before the 'Decision' heading.
+- The headings of each 'Input' column must be a Variable from the Glossary or be suitable to be ing added to the Glossary if there is no 'Glossary. 
+- The cells under each input heading are input test cells containing an expression about the input Variable, and which must evalutate to True, or False, depending upon the value of the input Variable. These inputs can be used to control the flow, that is, which Decision tables are run and which ones are skipped.  
+
+The Decision table can be followed by columns of 'Annotations' after the 'Execute Decision Table' column
 
 pyDMNrules will evalutate all the input test cells before running the associate DMN rules table.
 If all of the input test cells do not evaluate to True, then pyDMNrules will skip this DMN decision table and moves on to the next row
@@ -47,10 +67,10 @@ on other spreadsheets in the Excel workbook and can be 'Decisions as Rows', 'Dec
 ### Decision as Rows rules tables
 Decisions as Rows DMN rules tables have columns of inputs and columns of outputs,
 with a double line vertical border delineating where input columns stop and output columns begin.
-- The headings for the input and output columns must be Variables from the Glossary.
+- The headings for the input and output columns must be Variables from the Glossary or, for an output column, is can be the word 'Execute'.
 - The input test cells under the input heading must contain expressions about the input Variable,
 which will evaluate to True or False, depending upon the value of the input Variable.
-- The values in the output results cells, under the output headings, are the values that will be assigned to the output Variables, if all the input cells evaluate to True on the same row.
+- The values in the output results cells, under the output headings, are the values that will be assigned to the output Variables, if all the input cells evaluate to True on the same row. If the output heading is the word 'Execute', then the output value must be the name of a Decision Table, which will be invoked immediately. Which means any output values already assigned can be overwritten by the invoked Decision Table, and any outputs created by the invoked Decision Table can be overwritten by subsequent outputs in the current Decision Table.
 
 [ExampleRows.xlsx](https://github.com/russellmcdonell/pyDMNrules/blob/master/ExampleRows.xlsx) is an example fo a Decision as Rows DMN table.
 ### Decision as Columns rules tables
@@ -59,14 +79,14 @@ with a double line horizontal border delineating where input rows stop and outpu
 - The headings on the left hand side of the decision table, for the input and output rows, must be Variables from the Glossary.
 - The input test cells across the row must contain expressions about the input Variable,
 which will evalutate to True or False, depending upon the value of the input Variable.
-- The values in the output cells, across the row, are the values that will be assigned to the output Variable, if all the input cells evaluate to True in the same column.
+- The values in the output cells, across the row, are the values that will be assigned to the output Variable, if all the input cells evaluate to True in the same column.  If the output heading is the word 'Execute', then the output value must be the name of a Decision Table, which will be invoked immediately. Which means any output values already assigned can be overwritten by the invoked Decision Table, and any outputs created by the invoked Decision Table can be overwritten by subsequent outputs in the current Decision Table.
 
 [ExampleColumns.xlsx](https://github.com/russellmcdonell/pyDMNrules/blob/master/ExampleColumns.xlsx) is an example fo a Decision as Columns DMN table.
 ### Decision as Crosstab rules tables
 Decision as Crosstab DMN rules tables have one output heading at the top left of the table.
 - The horizontal and vertical headings, which must be Variables from the Glossary, are the input headings.
 - Under the horizontal headings and besides the vertical headings are the input test cells.
-- The output results cells form the body of the table and are assigned to the output Variable when the input cells in the same row and same column, all evaluate to True.
+- The output results cells form the body of the table and are assigned to the output Variable when the input cells in the same row and same column, all evaluate to True. If the output Variable is the word 'Execute', then the output value must be the name of a Decision Table, which will be invoked as part of completing the decision.
 
 [ExampleCrosstab.xlsx](https://github.com/russellmcdonell/pyDMNrules/blob/master/ExampleCrosstab.xlsx) is an example fo a Decision as Crosstab DMN table.
 
@@ -82,6 +102,11 @@ When any expression containing Patient.age is evaluated, Patient.age will be rep
 However, strings that may be ambiguous, must be enclosed in double quotes (").
 Any string that contains spaces or a comma is ambiguous and must enclosed in double quotes (").
 All strings can be enclosed in double quotes, so HIGH,DECLINE and "HIGH","DECLINE" are equivalent.
+
+# Ambigous strings:
+If you don't enclose codes in double quotes the pyDMNrules will try and interpret them. So codes which are all digits will be interpreted as numbers.
+Codes that start with a digit, such as 9A42, will cause FEEL errors and must be enclosed in double quotes. FEEL has a syntax for durations. Any code
+that looks like a duration, such as P42D (42 days), will need to be enclosed in double quotes.
 
 # USAGE:
 
@@ -188,7 +213,7 @@ pyDMNrules reserves the spreadsheet name 'Test' which can be used for storing te
 The function test() reads the test data, passes it through the decide() function and assembles the results which are returned to the caller.
 ### Unit Test data table(s)
 The 'Test' spreadsheet must contain Unit Test data tables.
-- Each Unit Test data table must be named with a 'Business Concept' from the Glossary.
+- Each Unit Test data table must be named with a 'Business Concept'.
 - The heading of the table must be Variables from the Glossary associated with the Business Concept.
 - The data, in each column, must be valid input data for the associated Variable.
 - Each row is considered a unit test data set.
