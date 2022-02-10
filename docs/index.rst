@@ -24,6 +24,8 @@ The pyDMNrules functions
 
    .. automethod:: use
 
+   .. automethod:: getGlossary
+
    .. automethod:: decide
 
    .. automethod:: decidePandas
