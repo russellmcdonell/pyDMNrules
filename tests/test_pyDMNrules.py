@@ -2139,3 +2139,40 @@ class TestClass:
         (status, newData) = dmnRules.decide(data)
         assert 'errors' in status
 
+    def test_NoglossNodecision(self):
+        '''
+        Check that the no Glossary and no Decision example works
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/TherapyNoglossNodecision.xlsx')
+        assert 'errors' not in status
+        data = {}
+        data['Patient Age'] = 56
+        data['Patient Allergies'] = ['Penicillin', 'Streptomycin']
+        data['Patient Creatinine Level'] = 2.0
+        data['Patient Weight'] = 78
+        data['Patient Active Medication'] = 'Coumadin'
+        data['Encounter Diagnosis'] = 'Acute Sinusitis'
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert decision == 'Decide DecisionMedication'
+        assert table == 'DecisionMedication'
+        assert rule == 'warnInt'
+        assert len(newData) == 8
+        assert 'Result' in newData[-1]
+        assert 'Recommended Medication' in newData[-1]['Result']
+        assert newData[-1]['Result']['Recommended Medication'] == 'Levofloxacin'
+        assert 'Recommended Dose' in newData[-1]['Result']
+        assert newData[-1]['Result']['Recommended Dose'] == '500mg every 24 hours for 14 days'
+        assert 'Warning' in newData[-1]['Result']
+        assert newData[-1]['Result']['Warning'] is not None
+        (testStatus, results) = dmnRules.test()
+        assert len(results) == 3
+        for i in range(len(results)):
+            assert 'Mismatches' not in results[i]
+        assert len(testStatus) == 3
+        for i in range(len(testStatus)):
+            assert 'errors' not in testStatus[i]
+

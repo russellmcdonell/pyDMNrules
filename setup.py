@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
 
 setuptools.setup(
     name='pyDMNrules',
-    version='1.3.4',
+    version='1.3.5',
     author='Russell McDonell',
     author_email='russell.mcdonell@c-cost.com',
     description='An implementation of DMN in Python. DMN rules are read from an Excel workbook',

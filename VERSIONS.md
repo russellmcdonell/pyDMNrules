@@ -1,3 +1,5 @@
+### 1.3.5 Made Decision optional
+* Added getGlossary() function to aid web developers
 ### 1.3.4 Made Glossary optional - Added rules within rules functionality
 * Changed test for Rules as Rows/Rules as Columns/CrossTab Rules (removed dependency on Glossary)
 * Added glossary validation for output and inputs for CrossTab Rules (must be in provided glossary or valid for assembled glossary)
