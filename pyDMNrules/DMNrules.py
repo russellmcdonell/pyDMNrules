@@ -2530,6 +2530,7 @@ class DMN():
         Returns:
             list of lists (2 dimensional array - table)
                 row[0] is the headings. The following rows are input test(s), Decisions, Execute Decision Tables, Annotation(s)
+
         """
         self.errors = []
         if not self.isLoaded:
@@ -2575,6 +2576,7 @@ class DMN():
         Returns:
             dictionary: (keys:tableName, value:xhml)
             The xml is XHTML compliant. <div xmlns="http://www.w3.org/1999/xhtml"><table> .. </table></div>
+            
         """
         sheets = {}
         singleBottom = 'border-bottom:2px solid'
