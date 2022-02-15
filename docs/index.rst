@@ -83,6 +83,7 @@ Attributes will be created by replacing any space characters (' ') with an under
 This can cause conflicts. For instance ':' is a valid character in a Variable, but not in a FEEL name.
 If there are two Varibles, being 'C' and 'C:' then both will be transformed to an Attribute of 'C' and a Glossary item of 'Data.C', which will be ambiguous.
 This ambiguity can be avoided by supplying a 'Glossary' and explicitely mapping 'C:' to a valid FEEL name, such as 'Ccolon'.
+The function getGlossary() will return the Glossary (either supplied or constructed).
 
 Decision -  optional
 ====================
@@ -116,6 +117,7 @@ To do this, pyDMNrules looks at the inputs of each DMN rules table and check to 
 If DMN rules table 'A' has an input 'X' and DMN rules table 'B' has an output of 'X', then pyDMNrules will ensure that DMN rules table 'B' is
 is placed in the constructed 'Decision' table before DMN rules table 'A'.
 The default order for the remaining table will be the order in which pyDMNrules found them in the workbook.
+The function getDecision() will return the 'Decision' table (either supplied or constructed).
 
 Decision - recommended
 ----------------------
@@ -188,6 +190,8 @@ Decision as Crosstab DMN rules tables have one output heading at the top left of
 
 [ExampleCrosstab.xlsx](https://github.com/russellmcdonell/pyDMNrules/blob/master/ExampleCrosstab.xlsx) is an example fo a Decision as Crosstab DMN table.
 
+The function getSheets() returns all the DMN rules tables.
+Each DMN rules table is returned as an XHTML rendering, with all Variables converted to their FEEL name equivalents (BusinessConcept.Attribute).
 
 Input cells, input 'Variable' and Input Tests
 =============================================
