@@ -2491,10 +2491,10 @@ class DMN():
         This routine returns the Glossary - each Variable, within each Business Concept.
 
         Args:
-            NONE
+            None
 
         Returns:
-            dictionary: (keys:Business Concept names, value:dictionary(keys:Variable names, value:tuple(FEELname, current value)))
+            dict:{keys:Business Concept names, value:dict{keys:Variable names, value:tuple(FEELname, current value)}}
 
         """
         self.errors = []
@@ -2528,9 +2528,11 @@ class DMN():
             None
 
         Returns:
-            list: of lists (2 dimensional array - table)
+            list:[[]]
             
-                - row[0] is the headings. The following rows are input test(s), Decisions, Execute Decision Tables, Annotation(s)
+                - a list of lists (2 dimensional array - table)            
+                - row[0] is the headings.
+                - The following rows are input test(s), Decisions, Execute Decision Tables, Annotation(s)
 
         """
         self.errors = []
@@ -2575,9 +2577,10 @@ class DMN():
             None
 
         Returns:
-            dictionary: (keys:tableName, value:xhml)
+            dict:{keys:tableName, value:xhml}
             
-                - The xml is XHTML compliant. <div xmlns="http://www.w3.org/1999/xhtml"><table> .. </table></div>
+                - The xml is XHTML compliant.
+                - e.g. <div xmlns="http://www.w3.org/1999/xhtml">Name<br/><table> .. </table></div>
             
         """
         sheets = {}
