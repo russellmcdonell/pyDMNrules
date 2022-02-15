@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pyDMNrules
-Version: 1.3.5
+Version: 1.3.6
 Summary: An implementation of DMN in Python. DMN rules are read from an Excel workbook
 Home-page: https://github.com/russellmcdonell/pyDMNrules
 Author: Russell McDonell
@@ -51,12 +51,13 @@ Input decision cells and Output cells can refer to input and output values eithe
 |   Delivery   |                      |   delivery    |
 |   Discount   |   Discount           |   discount    |
 
-If a 'Glossary' tab is not present - if no Glossary is supplied, then pyDMNrules will create one using the input and output headings.
+If a 'Glossary' tab is not present - if no Glossary is supplied, then pyDMNrules will construct one using the input and output headings.
 There will be a single 'Business Concept' called 'Data'.
 Attributes will be created by replacing any space characters (' ') with an underscore character ('_') and then removing all **invalid** FEEL name characters.
 This can cause conflicts. For instance ':' is a valid character in a Variable, but not in a FEEL name.
 If there are two Varibles, being 'C' and 'C:' then both will be transformed to an Attribute of 'C' and a Glossary item of 'Data.C', which will be ambiguous.
 This ambiguity can be avoided by supplying a 'Glossary' and explicitely mapping 'C:' to a valid FEEL name, such as 'Ccolon'.
+The function getGlossary() will return the Glossary (either supplied or constructed).
 
 ## Decision -  optional
 In order to make a decision, pyDMNrules needs to know where to start, what to do, when and why.
@@ -88,6 +89,7 @@ To do this, pyDMNrules looks at the inputs of each DMN rules table and check to 
 If DMN rules table 'A' has an input 'X' and DMN rules table 'B' has an output of 'X', then pyDMNrules will ensure that DMN rules table 'B' is
 is placed in the constructed 'Decision' table before DMN rules table 'A'.
 The default order for the remaining table will be the order in which pyDMNrules found them in the workbook.
+The function getDecision() will return the 'Decision' table (either supplied or constructed).
 
 ## Decision - recommended
 A 'Decision' table tells pyDMNrules exacty what to do.
@@ -126,7 +128,7 @@ There may be other scenario requiring a user created 'Decision' table.
 Hence the recommendation to provide one for anything other than the most trivial decisions.
 
 ## DMN rules tables
-The DMN rules table(s), listed under **Execute Decision Table**, must exist 
+The DMN rules table(s), listed under **Execute Decision Table**, in the 'Decision' table (either supplied or constructed) must exist 
 on other spreadsheets in the Excel workbook and can be 'Decisions as Rows', 'Decisions as Columns' or 'Decision as Crosstab' rules tables.
 ### Decision as Rows rules tables
 Decisions as Rows DMN rules tables have columns of inputs and columns of outputs,
@@ -153,6 +155,9 @@ Decision as Crosstab DMN rules tables have one output heading at the top left of
 - The output results cells form the body of the table and are assigned to the output Variable when the input cells in the same row and same column, all evaluate to True. If the output Variable is the word 'Execute', then the output value must be the name of a Decision Table, which will be invoked as part of completing the decision.
 
 [ExampleCrosstab.xlsx](https://github.com/russellmcdonell/pyDMNrules/blob/master/ExampleCrosstab.xlsx) is an example fo a Decision as Crosstab DMN table.
+
+The function getSheets() returns all the DMN rules tables.
+Each DMN rules table is returned as an XHTML rendering, with all Variables converted to their FEEL name equivalents (BusinessConcept.Attribute).
 
 # Strings:
 Decision Model Notation specifies that strings must be enclosed in double quotes ("), as in "this is a string", or be italicized.

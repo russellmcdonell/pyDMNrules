@@ -26,6 +26,10 @@ The pyDMNrules functions
 
    .. automethod:: getGlossary
 
+   .. automethod:: getDecision
+
+   .. automethod:: getSheets
+
    .. automethod:: decide
 
    .. automethod:: decidePandas

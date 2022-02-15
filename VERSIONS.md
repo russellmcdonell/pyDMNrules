@@ -1,3 +1,5 @@
+### 1.3.6 Added getDecision() and getSheets() functions
+* Fixed bug -  when constructing Glossary (none supplied) - output variables weren't being added to the Glossary
 ### 1.3.5 Made Decision optional
 * Added getGlossary() function to aid web developers
 ### 1.3.4 Made Glossary optional - Added rules within rules functionality
