@@ -1,3 +1,7 @@
+### 1.3.10 - Update to match pySFeel 1.3.7
+* Removed arithmetic operators from valid FEEL names
+### 1.3.9 - Bug fix (decidePandas) - released to PyPI
+* decidePandas() was not honoring the 'strict' option
 ### 1.3.8 - Update decidePandas - released to PyPI
 * Rewrite code to work around 'depricated' warnings
 ### 1.3.7 - Bug fix - released to PyPI

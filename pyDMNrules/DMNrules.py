@@ -31,7 +31,7 @@ class DMN():
         self.badFEELchars += u'\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF'
         self.badFEELchars += u'\u3001-\uD7FF\uF900-\uFDCF\uFDF0\uFFFD'
         self.badFEELchars += u'\U00010000-\U000EFFFF'
-        self.badFEELchars += u"0-9\u00B7\u0300-\u036F\u203F-\u2040\\./\\-'+\\*]"
+        self.badFEELchars += u"0-9\u00B7\u0300-\u036F\u203F-\u2040\\.]"
         self.glossary = {}
         self.glossaryItems = {}         # a dictonary - self.glossaryItems[BusinessConcept.Attribute] = Variable
         self.glossaryConcepts = {}      # a dictionary of BusinessConcepts
@@ -3172,7 +3172,6 @@ class DMN():
         dfResults = DataFrame(pandasColumns)                                # A DataFrame with columns and data types
 
         status = []
-        noResults = True
         noDecision = True
         for index, row in dfInput.iterrows():         # Iterate over each row in the dfInput Data Frame
             data = {}
@@ -3196,11 +3195,7 @@ class DMN():
                     pandasData[variables[variable]] = None
                 pandasData = pandas.DataFrame.from_dict(pandasData, orient='index')
                 pandasData = pandasData.transpose()
-                if noResults:
-                    dfResults = pandasData
-                    noResults = False
-                else:
-                    dfResults = pandas.concat([dfResults, pandasData])     # And append it to dfResults - the output Data Frame
+                dfResults = pandas.concat([dfResults, pandasData])     # And append it to dfResults - the output Data Frame
                 decisionData = {}
                 decisionData['RuleName'] = None
                 decisionData['TableName'] = None
@@ -3254,11 +3249,7 @@ class DMN():
                     pandasData[variables[variable]] = dmnData[variable]         # Return this value
                 pandasData = pandas.DataFrame.from_dict(pandasData, orient='index')
                 pandasData = pandasData.transpose()
-                if noResults:
-                    dfResults = pandasData
-                    noResults = False
-                else:
-                    dfResults = pandas.concat([dfResults, pandasData])     # And append these values to dfResults - the output Data Frame
+                dfResults = pandas.concat([dfResults, pandasData])     # And append these values to dfResults - the output Data Frame
                 if typeColumns:                                                 # Assign data types to any column for which we have new data types
                     dfResults = dfResults.astype(dataTypes)
                 decisionData = {}                                               # Create the Decision data which explain the decision
