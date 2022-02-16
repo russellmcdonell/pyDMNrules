@@ -1,3 +1,5 @@
+### 1.3.8 - Update decidePandas - released to PyPI
+* Rewrite code to work around 'depricated' warnings
 ### 1.3.7 - Bug fix - released to PyPI
 * Error when bad S-FEEL was being reported
 ### 1.3.6 Added getDecision() and getSheets() functions
