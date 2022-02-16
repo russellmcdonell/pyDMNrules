@@ -1,3 +1,5 @@
+### 1.3.7 - Bug fix - released to PyPI
+* Error when bad S-FEEL was being reported
 ### 1.3.6 Added getDecision() and getSheets() functions
 * Fixed bug -  when constructing Glossary (none supplied) - output variables weren't being added to the Glossary
 ### 1.3.5 Made Decision optional

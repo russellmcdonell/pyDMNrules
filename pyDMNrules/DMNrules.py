@@ -128,7 +128,7 @@ class DMN():
                 if isTest:
                     return None
                 if not isError:
-                    self.errors.append("S-FEEL syntax error in text '{!s}' at '{!s}' on sheet '{!s}':{!s}".format(data, coordinate, sheet, token.value))
+                    self.errors.append("S-FEEL syntax error in text '{!s}' at '{!s}' on sheet '{!s}':{!s}".format(text, coordinate, sheet, token.value))
                     isError = True
             else:
                 yaccTokens.append(token)
