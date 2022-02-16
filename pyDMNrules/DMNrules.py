@@ -3172,6 +3172,8 @@ class DMN():
         dfResults = DataFrame(pandasColumns)                                # A DataFrame with columns and data types
 
         status = []
+        noResults = True
+        noDecision = True
         for index, row in dfInput.iterrows():         # Iterate over each row in the dfInput Data Frame
             data = {}
             for column in row.keys():                          # Map each column to a Glossary Variable
@@ -3192,14 +3194,26 @@ class DMN():
                 pandasData = {}
                 for variable in variables:
                     pandasData[variables[variable]] = None
-                dfResults = dfResults.append(pandasData, ignore_index=True)     # And append it to dfResults - the output Data Frame
+                pandasData = pandas.DataFrame.from_dict(pandasData, orient='index')
+                pandasData = pandasData.transpose()
+                if noResults:
+                    dfResults = pandasData
+                    noResults = False
+                else:
+                    dfResults = pandas.concat([dfResults, pandasData])     # And append it to dfResults - the output Data Frame
                 decisionData = {}
                 decisionData['RuleName'] = None
                 decisionData['TableName'] = None
                 decisionData['RuleID'] = None
                 decisionData['DecisionAnnotations'] = None
                 decisionData['RuleAnnotations']  = None
-                dfDecision = dfDecision.append(decisionData, ignore_index=True)
+                decisionData = pandas.DataFrame.from_dict(decisionData, orient='index')
+                decisionData = decisionData.transpose()
+                if noDecision:
+                    dfDecision = decisionData
+                    noDecision = False
+                else:
+                    dfDecision = pandas.concat([dfDecision, decisionData])
             else:
                 status.append('no errors')
                 if isinstance(newData, list):                       # Find the last 'Result' - result of last decision rule
@@ -3238,7 +3252,13 @@ class DMN():
                             columnTyped[variable] = True
                             typeColumns = True
                     pandasData[variables[variable]] = dmnData[variable]         # Return this value
-                dfResults = dfResults.append(pandasData, ignore_index=True)     # And append these values to dfResults - the output Data Frame
+                pandasData = pandas.DataFrame.from_dict(pandasData, orient='index')
+                pandasData = pandasData.transpose()
+                if noResults:
+                    dfResults = pandasData
+                    noResults = False
+                else:
+                    dfResults = pandas.concat([dfResults, pandasData])     # And append these values to dfResults - the output Data Frame
                 if typeColumns:                                                 # Assign data types to any column for which we have new data types
                     dfResults = dfResults.astype(dataTypes)
                 decisionData = {}                                               # Create the Decision data which explain the decision
@@ -3247,9 +3267,17 @@ class DMN():
                 decisionData['RuleID'] = ruleID
                 decisionData['DecisionAnnotations'] = dmnDecisionAnnotations
                 decisionData['RuleAnnotations'] = dmnRuleAnnotations
-                dfDecision = dfDecision.append(decisionData, ignore_index=True)
+                decisionData = pandas.DataFrame.from_dict(decisionData, orient='index')
+                decisionData = decisionData.transpose()
+            if noDecision:
+                    dfDecision = decisionData
+                    noDecision = False
+            else:
+                dfDecision = pandas.concat([dfDecision, decisionData])
 
         dfStatus = Series(status, name='status')                                # Build the 'dfStatus' series 
+        dfResults = dfResults.reset_index()                                         # Add a sequential index to dfResults
+        dfDecision = dfDecision.reset_index()                                       # Add a sequential index to dfDecision
         return(dfStatus, dfResults, dfDecision)                                 # Return the status, results and decisions
 
 
