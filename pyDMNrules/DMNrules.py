@@ -3016,7 +3016,7 @@ class DMN():
                         sheets[table] += '</tr>'
                         inRow = False
             sheets[table] += '</table></div>'
-            return sheets
+        return sheets
         
         
     def replaceItems(self, text):

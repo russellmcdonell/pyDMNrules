@@ -1,3 +1,5 @@
+### 1.3.12 - Fixed bug in getSheetsn() - release to PyPI
+* getSheets() was not returning the first sheet
 ### 1.3.11 - Fixed bug in getDecision() - release to PyPI
 * getDecision() was not returning all the headers
 ### 1.3.10 - Update to match pySFeel 1.3.7
