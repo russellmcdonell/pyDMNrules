@@ -2692,9 +2692,9 @@ class DMN():
                             else:
                                 sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, doubleBottom, thisValidity)
                         elif not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
-                            sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, doubleLeft, singleRight, thisValidity)
+                            sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, doubleBottom, singleRight, thisValidity)
                         else:
-                            sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, doubleLeft, thisValidity)
+                            sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, doubleBottom, thisValidity)
                     if haveAnnotation:
                         for i in range(len(self.decisionTables[table]['annotation'])):
                             if i == 0:

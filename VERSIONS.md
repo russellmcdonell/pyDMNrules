@@ -1,3 +1,5 @@
+### 1.3.13 - Fixed another bug - getSheets() - released to PyPI
+* Error in headings with validity and annotation
 ### 1.3.12 - Fixed bug in getSheetsn() - release to PyPI
 * getSheets() was not returning the first sheet
 ### 1.3.11 - Fixed bug in getDecision() - release to PyPI
