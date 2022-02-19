@@ -8,6 +8,7 @@ import csv
 import io
 import datetime
 import copy
+from tkinter import W
 import pySFeel
 import openpyxl
 from openpyxl import load_workbook
@@ -1967,6 +1968,7 @@ class DMN():
         except (KeyError):
             haveDecision = False
         self.decisions = []
+        self.decisionHeading = []
         self.otherDecisions = []
         self.decisionTables = {}
         self.rules = {}
@@ -2110,6 +2112,7 @@ class DMN():
                 self.decisions.append((table, decision, inputTests, annotations))
                 self.decisionTables[table] = {}
                 self.decisionTables[table]['name'] = decision
+            self.decisionHeading = [inputColumns] + inputVariables
 
         # Now search for the Decision Tables
         theseTables = []
@@ -2438,6 +2441,7 @@ class DMN():
                 return status
 
         if not haveDecision:            # Build up self.decision of possible
+            self.decisionHeading = [0, 'Decisions', 'Execute Decision Tables']
             while len(theseTables) > 0:
                 for i in range(len(theseTables)):           # Check every table looking for tables with no dependencies
                     thisTable = theseTables[i]
@@ -2544,26 +2548,25 @@ class DMN():
             return (status, {})
 
         decisions = []
-        decisions.append([])
-        (table, thisDecision, inputTests, decisionAnnotations) = self.decisions[0]
-        if len(inputTests) > 0:
-            for (variable, test, isFixed, fixedValue) in inputTests:
-                decisions[-1].append(variable)
-        decisions[-1].append('Decisions')
-        decisions[-1].append('Execute Decision Tables')
-        if len(decisionAnnotations) > 0:
-            for (name, annotation) in decisionAnnotations:
-                decisions[-1].append(name)
+        inputColumns = self.decisionHeading[0]
+        decisions.append(self.decisionHeading[1:])
         for (table, thisDecision, inputTests, decisionAnnotations) in self.decisions:
             decisions.append([])
-            if len(inputTests) > 0:
+            for i in range(inputColumns):
                 for (variable, test, isFixed, fixedValue) in inputTests:
-                    decisions[-1].append(test)
+                    if variable == self.decisionHeading[i + 1]:
+                        decisions[-1].append(test)
+                        break
+                else:
+                    decisions[-1].append('')
             decisions[-1].append(thisDecision)
             decisions[-1].append(table)
             if len(decisionAnnotations) > 0:
                 for (name, annotation) in decisionAnnotations:
-                    decisions[-1].append(annotation)
+                    if annotation is None:
+                        decisions[-1].append('')
+                    else:
+                        decisions[-1].append(annotation)
         return decisions
        
         

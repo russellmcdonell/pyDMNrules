@@ -1,3 +1,5 @@
+### 1.3.11 - Fixed bug in getDecision() - release to PyPI
+* getDecision() was not returning all the headers
 ### 1.3.10 - Update to match pySFeel 1.3.7
 * Removed arithmetic operators from valid FEEL names
 ### 1.3.9 - Bug fix (decidePandas) - released to PyPI
