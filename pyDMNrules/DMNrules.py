@@ -8,7 +8,6 @@ import csv
 import io
 import datetime
 import copy
-from tkinter import W
 import pySFeel
 import openpyxl
 from openpyxl import load_workbook
