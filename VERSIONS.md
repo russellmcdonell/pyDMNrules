@@ -1,3 +1,5 @@
+### 1.3.15 - Fixed bug with 'Execute' output columns - released to PyPI
+ - Added validation for 'possible' tables - right structure, wrong headings
 ### 1.3.14 - Removed stray import of tkinter - released to PyPI
  - remove stray import of tkinter
  ### 1.3.13 - Fixed another bug - getSheets() - released to PyPI

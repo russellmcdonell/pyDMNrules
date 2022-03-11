@@ -1020,9 +1020,10 @@ class DMN():
                             if failErrors:
                                 if doingInputs:
                                     self.errors.append("Input heading '{!s}' in table '{!s}' at '{!s}' on sheet '{!s}' is not in the Glossary".format(thisCell, table, coordinate, sheet))
-                                else:
+                                    return (rows, cols, -1)
+                                elif thisCell != 'Execute':
                                     self.errors.append("Output heading '{!s}' in table '{!s}' at '{!s}' on sheet '{!s}' is not in the Glossary".format(thisCell, table, coordinate, sheet))
-                            return (rows, cols, -1)
+                                    return (rows, cols, -1)
                         elif thisCell != 'Execute':
                             variable = thisCell
                             concept = 'Data'
@@ -1293,9 +1294,10 @@ class DMN():
                             if failErrors:
                                 if doingInputs:
                                     self.errors.append("Input heading '{!s}' in table '{!s}' at '{!s}' on sheet '{!s}' is not in the Glossary".format(thisCell, table, coordinate, sheet))
-                                else:
+                                    return (rows, cols, -1)
+                                elif thisCell != 'Execute':
                                     self.errors.append("Output heading '{!s}' in table '{!s}' at '{!s}' on sheet '{!s}' is not in the Glossary".format(thisCell, table, coordinate, sheet))
-                            return (rows, cols, -1)
+                                    return (rows, cols, -1)
                         elif thisCell != 'Execute':
                             variable = thisCell
                             concept = 'Data'
@@ -2171,6 +2173,42 @@ class DMN():
                             status = {}
                             status['errors'] = self.errors
                             return status
+                        elif not failErrors and self.haveGlossary:
+                            # A 'valid' table, but were the input and output columns in the Glossary
+                            failed = False
+                            if 'inputColumns' in self.decisionTables[table]:
+                                for i in range(len(self.decisionTables[table]['inputColumns'])):
+                                    thisName = self.decisionTables[table]['inputColumns'][i]['name']
+                                    if (thisName not in self.glossary) and (thisName != 'Execute'):
+                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                        failed = True
+                            if 'inputRows' in self.decisionTables[table]:
+                                for i in range(len(self.decisionTables[table]['inputRows'])):
+                                    thisName = self.decisionTables[table]['inputRows'][i]['name']
+                                    if (thisName not in self.glossary) and (thisName != 'Execute'):
+                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                        failed = True
+                            if 'outputColumns' in self.decisionTables[table]:
+                                for i in range(len(self.decisionTables[table]['outputColumns'])):
+                                    thisName = self.decisionTables[table]['outputColumns'][i]['name']
+                                    if (thisName not in self.glossary) and (thisName != 'Execute'):
+                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                        failed = True
+                            if 'outputRows' in self.decisionTables[table]:
+                                for i in range(len(self.decisionTables[table]['outputRows'])):
+                                    thisName = self.decisionTables[table]['outputRows'][i]['name']
+                                    if (thisName not in self.glossary) and (thisName != 'Execute'):
+                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                        failed = True
+                            if 'output' in self.decisionTables[table]:
+                                thisName = self.decisionTables[table]['output']['name']
+                                if (thisName not in self.glossary) and (thisName != 'Execute'):
+                                    self.errors.append("Output heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                    failed = True
+                            if failed:
+                                status = {}
+                                status['errors'] = self.errors
+                                return status
 
                         if not haveDecision:        # Save the tables, inputs and outputs so we can create self.decisions
                             theseTables.append(table)
@@ -2416,8 +2454,8 @@ class DMN():
                             else:
                                 result = sfeelText
                     if isFixed and (variable != 'Execute'):
-                        if fixedValue in self.decisionTables[table]['outputValidity'][v]:
-                            rank = self.decisionTables[table]['outputValidity'][v].index(fixedValue)
+                        if fixedValue in self.decisionTables[table]['outputValidity'][outputIndex]:
+                            rank = self.decisionTables[table]['outputValidity'][outputIndex].index(fixedValue)
                         else:
                             rank = -1
                     if variable == 'Execute':
