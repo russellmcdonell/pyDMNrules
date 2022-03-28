@@ -24,6 +24,7 @@ class DMN():
         # self.glossary is a dictionary of dictionaries (one per variable).
         # self.glossary[variable]['item'] is BusinessConcept.Attribute - (FEEL name for variable)
         # self.glossary[variable]['concept'] is Business Concept
+        # self.glossary[variable]['annotations'] is the list of annotations for this variable
         self.haveGlossary = False
         self.haveDecision = False
         self.badFEELchars = u'[^?A-Z_a-z'
@@ -35,6 +36,7 @@ class DMN():
         self.glossary = {}
         self.glossaryItems = {}         # a dictonary - self.glossaryItems[BusinessConcept.Attribute] = Variable
         self.glossaryConcepts = {}      # a dictionary of BusinessConcepts
+        self.glossaryNames = ['glossary']
         self.glossaryLoaded = False
         self.isLoaded = False
         self.testIsLoaded = False
@@ -1046,6 +1048,7 @@ class DMN():
                             self.glossary[variable] = {}
                             self.glossary[variable]['item'] = item
                             self.glossary[variable]['concept'] = 'Data'
+                            self.glossary[variable]['annotations'] = []
                             self.glossaryItems[item] = variable
                             self.glossaryConcepts['Data'].append(variable)
                 if doingInputs:
@@ -1320,6 +1323,7 @@ class DMN():
                             self.glossary[variable] = {}
                             self.glossary[variable]['item'] = item
                             self.glossary[variable]['concept'] = 'Data'
+                            self.glossary[variable]['annotations'] = []
                             self.glossaryItems[item] = variable
                             self.glossaryConcepts['Data'].append(variable)
                 if doingInputs:
@@ -1526,6 +1530,7 @@ class DMN():
                         self.glossary[variable] = {}
                         self.glossary[variable]['item'] = item
                         self.glossary[variable]['concept'] = 'Data'
+                        self.glossary[variable]['annotations'] = []
                         self.glossaryItems[item] = variable
                         self.glossaryConcepts['Data'].append(variable)
 
@@ -1591,6 +1596,7 @@ class DMN():
                         self.glossary[variable] = {}
                         self.glossary[variable]['item'] = item
                         self.glossary[variable]['concept'] = 'Data'
+                        self.glossary[variable]['annotations'] = []
                         self.glossaryItems[item] = variable
                         self.glossaryConcepts['Data'].append(variable)
 
@@ -1691,6 +1697,7 @@ class DMN():
                         self.glossary[variable] = {}
                         self.glossary[variable]['item'] = item
                         self.glossary[variable]['concept'] = 'Data'
+                        self.glossary[variable]['annotations'] = []
                         self.glossaryItems[item] = variable
                         self.glossaryConcepts['Data'].append(variable)
 
@@ -1870,6 +1877,10 @@ class DMN():
                                     status = {}
                                     status['errors'] = self.errors
                                     return status
+                                glossaryName = thisCell[8:].strip()
+                                if (len(glossaryName) > 0) and (glossaryName[0] in '-:'):
+                                    glossaryName = glossaryName[1:].strip()
+                                self.glossaryNames = [glossaryName]
                                 inGlossary = True
                                 break
                     if inGlossary:
@@ -1897,6 +1908,9 @@ class DMN():
                 status = {}
                 status['errors'] = self.errors
                 return status
+            if cols > 3:
+                for thisCol in range(3, cols):
+                    self.glossaryNames.append(cell.offset(row=1, column=thisCol).value)
             thisConcept = None
             for thisRow in range(2, rows):
                 variable = cell.offset(row=thisRow).value
@@ -1948,6 +1962,10 @@ class DMN():
                 self.glossary[variable] = {}
                 self.glossary[variable]['item'] = item
                 self.glossary[variable]['concept'] = thisConcept
+                self.glossary[variable]['annotations'] = []
+                if cols > 3:
+                    for thisCol in range(3, cols):
+                        self.glossary[variable]['annotations'].append(cell.offset(row=thisRow, column=thisCol).value)
                 self.glossaryItems[item] = variable
                 self.glossaryConcepts[thisConcept].append(variable)
 
@@ -1968,6 +1986,7 @@ class DMN():
             haveDecision = True
         except (KeyError):
             haveDecision = False
+        self.decisionName = ''
         self.decisions = []
         self.decisionHeading = []
         self.otherDecisions = []
@@ -1987,6 +2006,9 @@ class DMN():
                                     status = {}
                                     status['errors'] = self.errors
                                     return status
+                                self.decisionName = thisCell[8:].strip()
+                                if (len(self.decisionName) > 0) and (self.decisionName[0] in '-:'):
+                                    self.decisionName = self.decisionName[1:].strip()
                                 inDecision = True
                                 break
                     if inDecision:
@@ -2038,6 +2060,7 @@ class DMN():
                             self.glossary[variable] = {}
                             self.glossary[variable]['item'] = item
                             self.glossary[variable]['concept'] = 'Data'
+                            self.glossary[variable]['attributes'] = []
                             self.glossaryItems[item] = variable
                             self.glossaryConcepts['Data'].append(variable)
                     inputColumns += 1
@@ -2478,6 +2501,7 @@ class DMN():
                 return status
 
         if not haveDecision:            # Build up self.decision of possible
+            self.decisionName = 'pyDMNrules computed'
             self.decisionHeading = [0, 'Decisions', 'Execute Decision Tables']
             while len(theseTables) > 0:
                 for i in range(len(theseTables)):           # Check every table looking for tables with no dependencies
@@ -2525,6 +2549,24 @@ class DMN():
                 self.errors.append("Bad S-FEEL when initializing Glossary with '{} <- null'".format(item))
 
 
+    def getGlossaryNames(self):
+        """
+        Return the Glossary Names
+
+        This routing returns the Glossary Name - the name of the glossary and the annotation headings
+
+        Args:
+            None
+
+        Returns:
+            str
+
+        """
+        if not self.isLoaded:
+            return []
+        return self.glossaryNames
+
+    
     def getGlossary(self):
         """
         Return the Glossary and current values
@@ -2535,18 +2577,12 @@ class DMN():
             None
 
         Returns:
-            dict:{keys:Business Concept names, value:dict{keys:Variable names, value:tuple(FEELname, current value)}}
+            dict:{keys:Business Concept names, value:dict{keys:Variable names, value:tuple(FEELname, current value, [annotations])}}
 
         """
-        self.errors = []
-        if not self.isLoaded:
-            self.errors.append('No rulesBook has been loaded')
-            status = {}
-            status['errors'] = self.errors
-            self.errors = []
-            return (status, {})
-
         glossary = {}
+        if not self.isLoaded:
+            return glossary
         for variable in self.glossary:
             concept = self.glossary[variable]['concept']
             if concept not in glossary:
@@ -2555,10 +2591,29 @@ class DMN():
             (failed, itemValue) = self.sfeel('{}'.format(FEELname))
             if failed:
                 self.errors.append("Bad S-FEEL when replacing variable '{}' with value".format(FEELname))
-            glossary[concept][variable] = (FEELname, itemValue)
+            glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
         return glossary
 
 
+    def getDecisionName(self):
+        """
+        Return the Decision Name
+
+        This routing returns the Decision Name - the heading for the Decision table
+        (or the 'name' from the <definitions> root element in the DMN.xml file)
+
+        Args:
+            None
+
+        Returns:
+            str
+
+        """
+        if not self.isLoaded:
+            return ''
+        return self.decisionName
+
+    
     def getDecision(self):
         """
         Return the Decision table
@@ -2576,15 +2631,9 @@ class DMN():
                 - The following rows are input test(s), Decisions, Execute Decision Tables, Annotation(s)
 
         """
-        self.errors = []
-        if not self.isLoaded:
-            self.errors.append('No rulesBook has been loaded')
-            status = {}
-            status['errors'] = self.errors
-            self.errors = []
-            return (status, {})
-
         decisions = []
+        if not self.isLoaded:
+            return decisions
         inputColumns = self.decisionHeading[0]
         decisions.append(self.decisionHeading[1:])
         for (table, thisDecision, inputTests, decisionAnnotations) in self.decisions:
@@ -2595,7 +2644,7 @@ class DMN():
                         decisions[-1].append(test)
                         break
                 else:
-                    decisions[-1].append('')
+                    decisions[-1].append('-')
             decisions[-1].append(thisDecision)
             decisions[-1].append(table)
             if len(decisionAnnotations) > 0:
@@ -2624,14 +2673,18 @@ class DMN():
             
         """
         sheets = {}
+        if not self.isLoaded:
+            return sheets
         singleBottom = 'border-bottom:2px solid'
         singleTop = 'border-top:2px solid'
         singleLeft = 'border-left:2px solid'
         singleRight = 'border-right:2px solid'
         doubleBottom = 'border-bottom:5px double'
         doubleLeft = 'border-left:5px double'
+        inputColor = 'background-color:LightSteelBlue'
+        outputColor = 'background-color:LightPink'
         for table in self.decisionTables:
-            sheets[table] = '<div xmlns="http://www.w3.org/1999/xhtml">{}<br/><table>'.format(table)
+            sheets[table] = '<div xmlns="http://www.w3.org/1999/xhtml"><div style="width:25%;background-color:black;color:white">{}</div><table>'.format(table)
             if ('inputColumns' in self.decisionTables[table]) and ('inputRows' not in self.decisionTables[table]):
                 # Rules as Rows
                 haveValidity = False
@@ -2653,9 +2706,9 @@ class DMN():
                     variable = self.decisionTables[table]['inputColumns'][i]['name']
                     variable = self.glossary[variable]['item']
                     if haveValidity:
-                        sheets[table] += '<th style="{};{};{}">{}</th>'.format(singleLeft, singleBottom, singleTop, variable)
+                        sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(inputColor, singleLeft, singleBottom, singleTop, variable)
                     else:
-                        sheets[table] += '<th style="{};{};{}">{}</th>'.format(singleLeft, doubleBottom, singleTop, variable)
+                        sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(inputColor, singleLeft, doubleBottom, singleTop, variable)
                 for i in range(len(self.decisionTables[table]['outputColumns'])):
                     variable = self.decisionTables[table]['outputColumns'][i]['name']
                     if variable != 'Execute':
@@ -2663,23 +2716,23 @@ class DMN():
                     if haveValidity:
                         if i == 0:
                             if not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
-                                sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(doubleLeft, singleBottom, singleTop, singleRight, variable)
+                                sheets[table] += '<th style="{};{};{};{};{}">{}</th>'.format(outputColor, doubleLeft, singleBottom, singleTop, singleRight, variable)
                             else:
-                                sheets[table] += '<th style="{};{};{}">{}</th>'.format(doubleLeft, singleBottom, singleTop, variable)
+                                sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(outputColor, doubleLeft, singleBottom, singleTop, variable)
                         elif not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
-                            sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(singleLeft, singleBottom, singleTop, singleRight, variable)
+                            sheets[table] += '<th style="{};{};{};{};{}">{}</th>'.format(outputColor, singleLeft, singleBottom, singleTop, singleRight, variable)
                         else:
-                            sheets[table] += '<th style="{};{};{}">{}</th>'.format(singleLeft, singleBottom, singleTop, variable)
+                            sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(outputColor, singleLeft, singleBottom, singleTop, variable)
                     else:
                         if i == 0:
                             if not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
-                                sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(doubleLeft, doubleBottom, singleTop, singleRight, variable)
+                                sheets[table] += '<th style="{};{};{};{};{}">{}</th>'.format(outputColor, doubleLeft, doubleBottom, singleTop, singleRight, variable)
                             else:
-                                sheets[table] += '<th style="{};{};{}">{}</th>'.format(doubleLeft, doubleBottom, singleTop, variable)
+                                sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(outputColor, doubleLeft, doubleBottom, singleTop, variable)
                         elif not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
-                            sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(singleLeft, doubleBottom, singleTop, singleRight, variable)
+                            sheets[table] += '<th style="{};{};{};{};{}">{}</th>'.format(outputColor, singleLeft, doubleBottom, singleTop, singleRight, variable)
                         else:
-                            sheets[table] += '<th style="{};{};{}">{}</th>'.format(singleLeft, doubleBottom, singleTop, variable)
+                            sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(outputColor, singleLeft, doubleBottom, singleTop, variable)
                 if haveAnnotation:
                     for i in range(len(self.decisionTables[table]['annotation'])):
                         if haveValidity:
@@ -2754,18 +2807,18 @@ class DMN():
                                 break
                         else:
                             thisTest = '-'
-                        sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, thisTest)
+                        sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, thisTest)
                     for i in range(len(self.rules[table][thisRule]['outputs'])):      # Output in this decision rule
                         (name, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][thisRule]['outputs'][i]
                         if i == 0:
                             if not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
-                                sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
                             else:
-                                sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, singleBottom, result)
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, result)
                         elif not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
-                            sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleRight, result)
+                            sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, result)
                         else:
-                            sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, result)
+                            sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, result)
                     if haveAnnotation:
                         for i in range(len(self.decisionTables[table]['annotation'])):
                             if i == 0:
@@ -2796,11 +2849,11 @@ class DMN():
                     variable = self.glossary[variable]['item']
                     sheets[table] += '<tr>'
                     if i == 0:
-                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleTop, variable)
+                        sheets[table] += '<td style="{};{};{};{}">{}</td>'.format(inputColor, singleLeft, singleBottom, singleTop, variable)
                     elif i == (len(self.decisionTables[table]['inputRows']) - 1):
-                        sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, doubleBottom, variable)
+                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(inputColor, singleLeft, doubleBottom, variable)
                     else:
-                        sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, variable)
+                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(inputColor, singleLeft, singleBottom, variable)
                     if haveValidity:
                         (testValidity, validityIsFixed, validityFixedValue) = self.decisionTables[table]['inputValidity'][i]
                         if testValidity is not None:
@@ -2830,43 +2883,43 @@ class DMN():
                             if thisRule == (len(self.rules[table]) - 1):          # And Last column
                                 if i == 0:              # first row
                                     if i == (len(self.decisionTables[table]['inputRows']) - 1):         # And last row - first and last column and row
-                                        sheets[table] += '<td style="{};{};{};{}">{}</td>'.format(doubleLeft, doubleBottom, singleTop, singleRight, thisTest)
+                                        sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleTop, singleRight, thisTest)
                                     else:                   # First and Last column on the first of many rows
-                                        sheets[table] += '<td style="{};{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleTop, singleRight, thisTest)
+                                        sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleTop, singleRight, thisTest)
                                 elif i == (len(self.decisionTables[table]['inputRows']) - 1):           # First and Last column on last row
-                                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, doubleBottom, singleRight, thisTest)
+                                        sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleRight, thisTest)
                                 else:                       # First and Last column on 'middle' row
-                                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleRight, thisTest)
+                                        sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, thisTest)
                             else:                   # First column of many
                                 if i == 0:                 # First row
                                     if i == (len(self.decisionTables[table]['inputRows']) - 1):         # First column of many on first and last row
-                                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, doubleBottom, singleTop, thisTest)
+                                        sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleTop, thisTest)
                                     else:                       # First column of many, first row of many
-                                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleTop, thisTest)
+                                        sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleTop, thisTest)
                                 elif i == (len(self.decisionTables[table]['inputRows']) - 1):  # First column of many on last row
-                                        sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, doubleBottom, thisTest)
+                                        sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, thisTest)
                                 else:                               # First column of many on 'middle' row
-                                        sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, singleBottom, thisTest)
+                                        sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, thisTest)
                         elif thisRule == (len(self.rules[table]) - 1):          # Last column after other columns
                             if i == 0:                  # first row
                                 if i == (len(self.decisionTables[table]['inputRows']) - 1):             # Last column of first and last row
-                                    sheets[table] += '<td style="{};{};{};{}">{}</td>'.format(singleLeft, doubleBottom, singleTop, singleRight, thisTest)
+                                    sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleTop, singleRight, thisTest)
                                 else:                   # Last column of first row of many rows
-                                    sheets[table] += '<td style="{};{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleTop, singleRight, thisTest)
+                                    sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleTop, singleRight, thisTest)
                             elif i == (len(self.decisionTables[table]['inputRows']) - 1):   # Last column on last row, after many columns
-                                    sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, doubleBottom, singleRight, thisTest)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleRight, thisTest)
                             else:               # Last column on 'middle' row
-                                    sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleRight, thisTest)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, thisTest)
                         else:                       # 'middle' column
                             if i == 0:      # first row
                                 if i == (len(self.decisionTables[table]['inputRows']) - 1):         # 'middle' column, first and last row
-                                    sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, doubleBottom, singleTop, thisTest)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleTop, thisTest)
                                 else:       # 'middle' column, first row of many
-                                    sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleTop, thisTest)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleTop, thisTest)
                             elif i == (len(self.decisionTables[table]['inputRows']) - 1):       # 'middle' column, last row
-                                    sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, doubleBottom, thisTest)
+                                    sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, thisTest)
                             else:       # 'middle' column, 'middle' row
-                                    sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, thisTest)
+                                    sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, thisTest)
                     sheets[table] += '</tr>'
                 for i in range(len(self.decisionTables[table]['outputRows'])):
                     sheets[table] += '<tr>'
@@ -2874,9 +2927,9 @@ class DMN():
                     if variable != 'Execute':
                         variable = self.glossary[variable]['item']
                     if i == (len(self.decisionTables[table]['outputRows']) - 1):
-                        sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, doubleBottom, variable)
+                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(outputColor, singleLeft, doubleBottom, variable)
                     else:
-                        sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, variable)
+                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(outputColor, singleLeft, singleBottom, variable)
                     if haveValidity:
                         if len(self.decisionTables[table]['outputValidity'][i]) == 0:
                             if i == (len(self.decisionTables[table]['outputRows']) - 1):
@@ -2893,23 +2946,23 @@ class DMN():
                         if thisRule == 0:           # First column
                             if thisRule == (len(self.rules[table]) - 1):      # And last column
                                 if i == (len(self.decisionTables[table]['outputRows']) - 1):        # Last row
-                                    sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, doubleBottom, singleRight, result)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleRight, result)
                                 else:       # First and last column of 'middle' row
-                                    sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
                             elif i == (len(self.decisionTables[table]['outputRows']) - 1):      # First column, last row of many columns
-                                sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, doubleBottom, result)
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, result)
                             else:           # First column of 'middle' row
-                                sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, singleBottom, result)
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, result)
                         elif thisRule == (len(self.rules[table]) - 1):      # Last column
                             if i == (len(self.decisionTables[table]['outputRows']) - 1):        # Last column on last row
-                                sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, doubleBottom, singleRight, result)
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleRight, result)
                             else:       # Last column on 'middle' row
-                                sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleRight, result)
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, result)
                         else:           # Other column
                             if i == (len(self.decisionTables[table]['outputRows']) - 1):        # 'middle' column on last row
-                                sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, doubleBottom, result)
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, result)
                             else:       # 'middle' column on 'middle' row
-                                sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, result)
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, result)
                     sheets[table] += '</tr>'
                 if haveAnnotation:
                     for i in range(len(self.decisionTables[table]['annotation'])):
@@ -2962,9 +3015,9 @@ class DMN():
                 variable = self.decisionTables[table]['output']['name']
                 if variable != 'Execute':
                     variable = self.glossary[variable]['item']
-                sheets[table] += '<tr><td rowspan="{}" colspan="{}" style="{};{};{}">{}</td>'.format(rowspan, colspan, singleLeft, doubleBottom, singleTop, variable)
+                sheets[table] += '<tr><td rowspan="{}" colspan="{}" style="{};{};{};{}">{}</td>'.format(rowspan, colspan, outputColor, singleLeft, doubleBottom, singleTop, variable)
                 colspan = len(self.decisionTables[table]['inputColumns'])
-                sheets[table] += '<td colspan="{}" style="{};{};{};{}">{}</td></tr>'.format(colspan, doubleLeft, singleBottom, singleTop, singleRight, ','.join(columns))
+                sheets[table] += '<td colspan="{}" style="{};{};{};{};{}">{}</td></tr>'.format(colspan, inputColor, doubleLeft, singleBottom, singleTop, singleRight, ','.join(columns))
                 for i in range(len(columns)):
                     sheets[table] += '<tr>'
                     for j in range(len(self.decisionTables[table]['inputColumns'])):
@@ -2976,51 +3029,51 @@ class DMN():
                                 if i == (len(columns) - 1):         # Last row of inputs
                                     if j == 0:
                                         if j == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                            sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, doubleBottom, singleRight, thisTest)
+                                            sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleRight, thisTest)
                                         else:
-                                            sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, doubleBottom, thisTest)
+                                            sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, thisTest)
                                     elif j == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, doubleBottom, singleRight, thisTest)
+                                        sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleRight, thisTest)
                                     else:
-                                        sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, doubleBottom, thisTest)
+                                        sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, thisTest)
                                 else:
                                     if j == 0:
                                         if j == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                            sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleRight, thisTest)
+                                            sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, thisTest)
                                         else:
-                                            sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, singleBottom, thisTest)
+                                            sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, thisTest)
                                     elif j == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleRight, thisTest)
+                                        sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, thisTest)
                                     else:
-                                        sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, thisTest)
+                                        sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, thisTest)
                                 break
                         else:
                             if i == (len(columns) - 1):
                                 if j == 0:
                                     if j == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                        sheets[table] += '<td style="{};{};{}">-</td>'.format(doubleLeft, doubleBottom, singleRight)
+                                        sheets[table] += '<td style="{};{};{};text-align:center">-</td>'.format(doubleLeft, doubleBottom, singleRight)
                                     else:
-                                        sheets[table] += '<td style="{};{}">-</td>'.format(doubleLeft, doubleBottom)
+                                        sheets[table] += '<td style="{};{};text-align:center">-</td>'.format(doubleLeft, doubleBottom)
                                 elif j == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                    sheets[table] += '<td style="{};{};{}">-</td>'.format(singleLeft, doubleBottom, singleRight)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">-</td>'.format(singleLeft, doubleBottom, singleRight)
                                 else:
-                                    sheets[table] += '<td style="{};{}">-</td>'.format(singleLeft, doubleBottom)
+                                    sheets[table] += '<td style="{};{};text-align:center">-</td>'.format(singleLeft, doubleBottom)
                             else:
                                 if j == 0:
                                     if j == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                        sheets[table] += '<td style="{};{};{}">-</td>'.format(doubleLeft, singleBottom, singleRight)
+                                        sheets[table] += '<td style="{};{};{};text-align:center">-</td>'.format(doubleLeft, singleBottom, singleRight)
                                     else:
-                                        sheets[table] += '<td style="{};{}">-</td>'.format(doubleLeft, singleBottom)
+                                        sheets[table] += '<td style="{};{};text-align:center">-</td>'.format(doubleLeft, singleBottom)
                                 elif j == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                    sheets[table] += '<td style="{};{};{}">-</td>'.format(singleLeft, singleBottom, singleRight)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">-</td>'.format(singleLeft, singleBottom, singleRight)
                                 else:
-                                    sheets[table] += '<td style="{};{}">-</td>'.format(singleLeft, singleBottom)
+                                    sheets[table] += '<td style="{};{};text-align:center">-</td>'.format(singleLeft, singleBottom)
                     sheets[table] += '</tr>'
                 thisRule = 0
                 for i in range(len(rows)):
                     if i == 0:
                         rowspan = len(self.decisionTables[table]['inputRows'])
-                        sheets[table] += '<tr><td rowspan="{}" style="{};{}">{}</td>'.format(rowspan, singleLeft, singleBottom, ','.join(rows))
+                        sheets[table] += '<tr><td rowspan="{}" style="{};{};{}">{}</td>'.format(rowspan, inputColor, singleLeft, singleBottom, ','.join(rows))
                     else:
                         sheets[table] += '<tr><td></td>'
                     inRow = True
@@ -3032,23 +3085,23 @@ class DMN():
                                 thisTest = test.replace('<', '&lt;').replace('>', '&gt;')
                                 if not inRow:
                                     sheets[table] += '<tr>'
-                                sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, thisTest)
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, thisTest)
                                 break
                         else:
                             if not inRow:
                                 sheets[table] += '<tr>'
-                            sheets[table] += '<td style="{};{}">-</td>'.format(singleLeft, singleBottom)
+                            sheets[table] += '<td style="{};{};text-align:center">-</td>'.format(singleLeft, singleBottom)
                         for k in range(len(self.decisionTables[table]['inputColumns'])):
                             (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][thisRule]['outputs'][0]
                             if k == 0:
                                 if k == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                    sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
                                 else:
-                                    sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, singleBottom, result)
+                                    sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, result)
                             elif k == (len(self.decisionTables[table]['inputColumns']) - 1):
-                                sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleRight, result)
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, result)
                             else:
-                                sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, result)
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, result)
                             thisRule += 1
                         sheets[table] += '</tr>'
                         inRow = False

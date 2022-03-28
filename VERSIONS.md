@@ -1,3 +1,8 @@
+### 1.3.16 - Added colours to Input and Output heading in getSheets() - realsed to PyPI
+ - Centre aligned input tests and output value in getSheets()
+ - Fixed error return when no rules loaded in getGlossary(), getDecision(), getSheets()
+ - Preserved annotations in the Glossary
+ - Added getGlossaryNames()
 ### 1.3.15 - Fixed bug with 'Execute' output columns - released to PyPI
  - Added validation for 'possible' tables - right structure, wrong headings
 ### 1.3.14 - Removed stray import of tkinter - released to PyPI

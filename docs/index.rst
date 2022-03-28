@@ -24,7 +24,11 @@ The pyDMNrules functions
 
    .. automethod:: use
 
+   .. automethod:: getGlossaryNames
+
    .. automethod:: getGlossary
+
+   .. automethod:: getDecisionName
 
    .. automethod:: getDecision
 
