@@ -24,6 +24,10 @@ The pyDMNrules functions
 
    .. automethod:: use
 
+   .. automethod:: loadXML
+
+   .. automethod:: useXML
+
    .. automethod:: getGlossaryNames
 
    .. automethod:: getGlossary
@@ -48,7 +52,7 @@ The pyDMNrules functions
 pyDMNrules
 ==========
 
-pyDMNrules build a rules engine from an Excel workbook which may contain a 'Glossary' tab an a 'Decision' tab.
+pyDMNrules builds a rules engine from an Excel workbook which may contain a 'Glossary' tab and a 'Decision' tab.
 Other tabs will contain the DMN rules tables use to build the rules engine.
 
 Glossary - optional
@@ -86,7 +90,7 @@ There will be a single 'Business Concept' called 'Data'.
 Attributes will be created by replacing any space characters (' ') with an underscore character ('_') and then removing all **invalid** FEEL name characters.
 This can cause conflicts. For instance ':' is a valid character in a Variable, but not in a FEEL name.
 If there are two Varibles, being 'C' and 'C:' then both will be transformed to an Attribute of 'C' and a Glossary item of 'Data.C', which will be ambiguous.
-This ambiguity can be avoided by supplying a 'Glossary' and explicitely mapping 'C:' to a valid FEEL name, such as 'Ccolon'.
+This ambiguity will be resolved by pyDMNrules by adding a period ('.') and one or more digit characters to to the ambiguous Attribute.
 The function getGlossary() will return the Glossary (either supplied or constructed).
 
 Decision -  optional

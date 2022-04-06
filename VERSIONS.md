@@ -1,3 +1,6 @@
+### 1.3.17 - Added Beta XML support
+ - Implemented automatic disambiguation of clashing, automatically derived, Attribute names.
+ - Fixed output for COLLECTION, RULES ORDER and OUTPUT ORDER Hit Policies
 ### 1.3.16 - Added colours to Input and Output heading in getSheets() - realsed to PyPI
  - Centre aligned input tests and output value in getSheets()
  - Fixed error return when no rules loaded in getGlossary(), getDecision(), getSheets()

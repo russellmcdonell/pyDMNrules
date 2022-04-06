@@ -2142,6 +2142,7 @@ class TestClass:
     def test_NoglossNodecision(self):
         '''
         Check that the no Glossary and no Decision example works
+        Slightly more complicated because the hitPolicy is 'R'
         '''
         dmnRules = pyDMNrules.DMN()
         status = dmnRules.load('../pyDMNrules/TherapyNoglossNodecision.xlsx')
@@ -2155,12 +2156,15 @@ class TestClass:
         data['Encounter Diagnosis'] = 'Acute Sinusitis'
         (status, newData) = dmnRules.decide(data)
         assert 'errors' not in status
-        assert isinstance(newData, list)
-        (decision, table, rule) = newData[-1]['Executed Rule']
+        assert isinstance(newData, list)        # A list of dictionaries
+        assert len(newData) == 8
+        assert isinstance(newData[-1], dict)
+        assert 'Executed Rule' in newData[-1]
+        assert isinstance(newData[-1]['Executed Rule'], list)       # A list - one entry per rule run
+        (decision, table, rule) = newData[-1]['Executed Rule'][-1]
         assert decision == 'Decide DecisionMedication'
         assert table == 'DecisionMedication'
         assert rule == 'warnInt'
-        assert len(newData) == 8
         assert 'Result' in newData[-1]
         assert 'Recommended Medication' in newData[-1]['Result']
         assert newData[-1]['Result']['Recommended Medication'] == 'Levofloxacin'
