@@ -2,6 +2,7 @@
 # pyDMNrules.py
 # -----------------------------------------------------------------------------
 
+from argparse import Namespace
 import sys
 import re
 import csv
@@ -35,6 +36,7 @@ class DMN():
         self.badFEELchars += u'\U00010000-\U000EFFFF'
         self.badFEELchars += u"0-9\u00B7\u0300-\u036F\u203F-\u2040\\.]"
         self.glossary = {}
+        self.glossaryLen = {}
         self.glossaryItems = {}         # a dictonary - self.glossaryItems[BusinessConcept.Attribute] = Variable
         self.glossaryConcepts = {}      # a dictionary of BusinessConcepts
         self.glossaryNames = ['glossary']
@@ -42,6 +44,30 @@ class DMN():
         self.isLoaded = False
         self.testIsLoaded = False
         self.errors = []
+        self.DMNfunctions = [
+            'date(', 'time(', 'date and time(',
+            'number(', 'string(', 'not(',
+            'substring(', 'string length(', 'upper case(', 'lower case(', 'substring before(', 'substring after(',
+            'replace(', 'contains(', 'starts with(', 'ends with(', 'matches(', 'split(', 'list contains(',
+            'count(', 'min(', 'max(', 'sum(', 'mean(', 
+            'all(', 'any(', 'sublist(', 'append(', 'concatenate(', 'insert before(', 'remove(', 'reverse(', 'index of(',
+            'union(', 'distinct values(', 'flatten(',
+            'product(', 'median(', 'stddev(',  'mode(',
+            'decimal(', 'floor(', 'ceiling(', 'abs(', 'modulo(', 'sqrt(', 'log(', 'exp(', 'odd(', 'even(',
+            'valuet(', 'valuet-1(', 'valuedt(', 'valuedt-1(', 'valuedtd(', 'valuedtd-1(', 'valueymd(', 'valueymd-1(',
+            'duration(', 'years and months duration(', 'get value(', 'get entries(',
+            'is(', 'before(', 'after(', 'meets(', 'met by(', 'overlaps(', 'overlaps before(', 'overlaps after(',
+            'finishes(', 'finished by(', 'includes(', 'during(', 'starts(', 'started by(', 'coincides(',
+            'day of year(', 'day of week(', 'month of year(', 'week of year('
+            ]
+        self.DMNdotOperators = [
+            '.timezone', '.time offset',
+            '.years', '.months', '.days',
+            '.hours', '.minutes', '.seconds',
+            '.year', '.month', '.day', '.weekday',
+            '.hour', '.minute', '.second',
+            '.start included', '.end included', '.start', '.end'
+        ]
 
 
     def sfeel(self, text):
@@ -72,36 +98,54 @@ class DMN():
                 newText += text[at:at + stringEnd.end()]
                 at += stringEnd.end()
                 continue
+            isFunction = False
+            for i in range(len(self.DMNfunctions)):
+                if text[at:].startswith(self.DMNfunctions[i]):
+                    isFunction = True
+                    newText += text[at:at + len(self.DMNfunctions[i])]
+                    at += len(self.DMNfunctions[i])
+                    break
+            if isFunction:
+                continue
             foundAt = foundLen = -1             # Find the nearest, longest replacement
+            dotOperator = None
             foundVariable = None
             searchTo = text[at:].find('"')      # Stop replacing at the next string
             if searchTo == -1:
                 searchTo = to - at
             # Look for any variable at this spot
-            for variable in self.glossary:
-                match = re.search(r'\b' + variable + r'\b', text[at:at + searchTo])
-                if match is not None:
-                    # We don't prohibit using the same 'name' for a Variable AND a Business Concept AND an Attribute
-                    # So BusinessConcept.Attribute could be BusinessConcept.Variable or Variable.Attribute
-                    # Neither of which is a match - BusinessConcept.Attribute is replace with a value later
-                    found = True
-                    for item in self.glossaryItems:                 # Check every BusinessConcept.Attribute combination
-                        if text[at + match.start():].startswith(item):  # Check that we haven't hit BusinessConcept.Attribute
-                            found = False
-                            break
-                        if text[at:at + match.end()].endswith(item):    # Or landed on BusinessConcept.Attribute
-                            found = False
-                            break
-                    if not found:
-                        continue
-                    if ((foundAt == -1) or (match.start() < foundAt)):                  # First found or nearer find
-                        foundAt = match.start()
-                        foundLen = len(variable)
-                        foundVariable = variable
-                    elif ((foundAt == match.start()) and (len(variable) > foundLen)):   # longer find at same place
-                        foundAt = match.start()
-                        foundLen = len(variable)
-                        foundVariable = variable
+            for thisLen in sorted(self.glossaryLen, reverse=True):          # Look for the longest match first
+                for variable in self.glossaryLen[thisLen]:
+                    thisVariable = re.sub(r'\.', r'\\.', variable)
+                    match = re.search(r'\b' + thisVariable + r'\b', text[at:at + searchTo])
+                    if match is not None:
+                        # We don't prohibit using the same 'name' for a Variable AND a Business Concept AND an Attribute
+                        # So BusinessConcept.Attribute could be BusinessConcept.Variable or Variable.Attribute
+                        # Neither of which is a match - BusinessConcept.Attribute is replace with a value later
+                        found = True
+                        for item in self.glossaryItems:                 # Check every BusinessConcept.Attribute combination
+                            if text[at + match.start():].startswith(item):  # Check that we haven't hit BusinessConcept.Attribute
+                                found = False
+                                break
+                            if text[at:at + match.end()].endswith(item):    # Or landed on BusinessConcept.Attribute
+                                found = False
+                                break
+                        if not found:
+                            continue
+                        # Check for a variable with a dot operator
+                        thisDotOperator = None
+                        for i in range(len(self.DMNdotOperators)):
+                            if text[at + match.start() + len(variable):].startswith(self.DMNdotOperators[i]):
+                                thisDotOperator = self.DMNdotOperators[i]
+                                break
+                        if ((foundAt == -1) or (match.start() < foundAt)):                  # First found or nearer find
+                            foundAt = match.start()
+                            dotOperator = thisDotOperator
+                            if dotOperator is not None:
+                                foundLen = len(variable) + len(dotOperator)
+                            else:
+                                foundLen = len(variable)
+                            foundVariable = variable
             if foundAt == -1:               # Nothing found
                 newText += text[at:at + searchTo]
                 at += searchTo
@@ -112,14 +156,16 @@ class DMN():
             item = self.glossary[foundVariable]['item']             # Add BusinessConcept.Attribute to newText
             replaced.append(foundVariable)
             newText += item
+            if dotOperator is not None:
+                newText += dotOperator
             at += foundLen
         return (replaced, newText)
 
 
     def data2sfeel(self, coordinate, sheet, text, isTest):
-        # Check that a string of text (data) from an Excel spreadsheet cell is valid S-FEEL
+        # Check that a string of text (data) from an Excel spreadsheet cell or DMN XML file, is valid S-FEEL
         # Start by replacing all 'Variable's with their BusinessConcept.Attribute equivalents (which are valid S-FEEL)
-        # print('data2sfeel:', coordinate, sheet, "'{!s}".format(data), isTest)
+        # print('data2sfeel:', "'{!s}".format(data), isTest)
 
         # Use the pySFeel tokenizer to look for strings that look like 'names', but aren't in the glossary
         isError = False
@@ -130,38 +176,137 @@ class DMN():
                 if isTest:
                     return None
                 if not isError:
-                    self.errors.append("S-FEEL syntax error in text '{!s}' at '{!s}' on sheet '{!s}':{!s}".format(text, coordinate, sheet, token.value))
+                    if sheet is None:
+                        self.errors.append("S-FEEL syntax error in text '{!s}':{!s}".format(text, token.value))
+                    else:
+                        self.errors.append("S-FEEL syntax error in text '{!s}' at '{!s}' on sheet '{!s}':{!s}".format(text, coordinate, sheet, token.value))
                     isError = True
             else:
                 yaccTokens.append(token)
         thisData = ''
         # Step through the tokens
-        for token in yaccTokens:
-            if token.type != 'NAME':    # If it doesn't look like a name then leave it alone
-                if (len(token.value) > 0) and (token.value[0] != '.') and (thisData != ''):
-                    thisData += ' '
-                thisData += token.value
+        foundContexts = []          # Allow for filters of Business Concepts
+        lastTokenValue = None
+        inContext = False
+        contextFilter = False
+        skipNextToken = False
+        everySome = False
+        satisfies = False
+        for tokenNum in range(len(yaccTokens)):
+            if skipNextToken:
+                skipNextToken = False
+                lastTokenValue = token.value
                 continue
-            if token.value in self.glossaryItems:     # If it's a fully qualified name (BusinessConcept.Attribute) then leave it alone
+            token = yaccTokens[tokenNum]
+            if token.type != 'NAME':    # If it doesn't look like a name then leave it alone
+                if (len(token.value) > 0) and (token.value[0] != '.') and (token.value != '[') and (thisData != ''):
+                    thisData += ' '
+                if (lastTokenValue == ']') and (token.value == '.'):
+                    contextFilter = True
+                else:
+                    contextFilter = False
+                thisData += token.value
+                if token.type == 'EVERY':
+                    everySome = True
+                elif token.type == 'SOME':
+                    everySome = True
+                elif token.type == 'SATISFIES':
+                    satisfies = True
+            elif everySome:
+                thisData += ' ' + token.value
+                everySome = False
+            elif satisfies:
+                thisData += ' ' + token.value
+                satisfies = False
+            elif token.value in self.glossaryItems:     # If it's a valid name then leave it alone
                 if thisData != '':
                     thisData += ' '
                 thisData += token.value + ' '
-            else:                           # Otherwise, assume it's a string that is missing it's double quotes
-                thisData += '"' + token.value + '"'
+                inContext = False
+            elif token.value in self.glossaryConcepts:     # If it's a valid BUsiness Concept, then leave it alone, as it must be followed by a '['
+                thisData += token.value
+                if tokenNum < len(yaccTokens) - 1:      # Check for a dot operator after a valid name
+                    nextToken = yaccTokens[tokenNum + 1]
+                    if nextToken.value == '[':
+                        inContext = True
+                        foundContexts.insert(0, token.value)
+            elif inContext:
+                if token.value == 'index':          # 'index' keyword in a slice
+                    thisData += token.value + ' '
+                else:
+                    contextLen = len(foundContexts[0]) + 1
+                    for variable in self.glossaryConcepts[foundContexts[0]]:
+                        if token.value == variable[contextLen:]:
+                            thisData += token.value
+                            break
+                    else:
+                        thisData += '"' + token.value + '"'
+                        thisContext = None
+            elif contextFilter:
+                if len(foundContexts) > 0:
+                    contextLen = len(foundContexts[0]) + 1
+                    for variable in self.glossaryConcepts[foundContexts[0]]:
+                        if token.value == variable[contextLen:]:
+                            thisData += token.value
+                            break
+                    else:
+                        thisData += '"' + token.value + '"'
+                    foundContexts.pop(0)
+                else:
+                    thisData += '"' + token.value + '"'
+                contextFilter = False
+            else:       # Look for 'names' that are in the glossaryItems, but have a dot operator
+                if (token.value.endswith('.time')) and (token.value[:-5] in self.glossaryItems):    # Special test for '.time offset'
+                    if tokenNum < len(yaccTokens) - 1:      # Check for a dot operator after a valid name
+                        nextToken = yaccTokens[tokenNum + 1]
+                        if (nextToken.type == 'NAME') and (nextToken.value == 'offset'):
+                            if thisData != '':
+                                thisData += ' '
+                            thisData += token.value + '_offset'
+                            skipNextToken = True
+                elif (token.value.endswith('.start')) and (token.value[:-6] in self.glossaryItems):    # Special test for '.start included'
+                    if tokenNum < len(yaccTokens) - 1:      # Check for a dot operator after a valid name
+                        nextToken = yaccTokens[tokenNum + 1]
+                        if (nextToken.type == 'NAME') and (nextToken.value == 'included'):
+                            if thisData != '':
+                                thisData += ' '
+                            thisData += token.value + '_included'
+                            skipNextToken = True
+                elif (token.value.endswith('.end')) and (token.value[:-4] in self.glossaryItems):    # Special test for '.end included'
+                    if tokenNum < len(yaccTokens) - 1:      # Check for a dot operator after a valid name
+                        nextToken = yaccTokens[tokenNum + 1]
+                        if (nextToken.type == 'NAME') and (nextToken.value == 'included'):
+                            if thisData != '':
+                                thisData += ' '
+                            thisData += token.value + '_included'
+                            skipNextToken = True
+                else:
+                    for i in range(len(self.DMNdotOperators)):
+                        if (token.value.endswith(self.DMNdotOperators[i])) and (token.value[:-len(self.DMNdotOperators[i])] in self.glossaryItems):
+                            if thisData != '':
+                                thisData += ' '
+                            thisData += token.value + ' '
+                            break
+                    else:                          # Otherwise, assume it's a string that is missing it's double quotes
+                        thisData += '"' + token.value + '"'
+            lastTokenValue = token.value
         return thisData
 
 
     def test2sfeel(self, variable, coordinate, sheet, test):
         '''
-    Combine the contents of an Excel cell (test) which is a string that can be combined
+    Combine the contents of an Excel cell (test) or <inputEntry> from a DMN XML file,  which is a string that can be combined
     with the Glossary variable ([Business Concept.Attribute]) to create a FEEL logical expression
     which pySFeel will evaluate to True or False    
         '''
-        # print('test2sfeel', variable, coordinate, sheet, test)
+        # print('test2sfeel', variable, test)
         thisTest = str(test).strip()
         # Check for bad S-FEEL
         if len(thisTest) == 0:
-            self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+            if sheet is None:
+                self.errors.append("Bad S-FEEL '{!r}'".format(test))
+            else:
+                self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
             return 'null'
 
         # Check for a comma separated list of strings - however, is only a list of tests if it is not a FEEL list
@@ -591,7 +736,10 @@ class DMN():
         variableIsNot = False
         if testIsNot:
             if thisTest.startswith('not '):
-                self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Bad S-FEEL '{!r}'".format(test))
+                else:
+                    self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
             variableIsNot = True
         elif not wasString and thisTest.startswith('not '):
@@ -632,20 +780,32 @@ class DMN():
 
         # Check for bad S-FEEL
         if len(thisTest) == 0:
-            self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+            if sheet is None:
+                self.errors.append("Bad S-FEEL '{!r}'".format(test))
+            else:
+                self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
             return 'null'
 
         # Check for a list or a range, with 'in' either specified or implied
         if not wasString and (thisTest[0]  in ['[', '(']) and (thisTest[-1]  in [']', ')']):
             # Start putting the nots and ins back in - if they are valid
             if testIsIn:        # This is 'list/range' in variable - which is not supported
-                self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Bad S-FEEL '{!r}'".format(test))
+                else:
+                    self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
             if testIsNegated:       # variable in 'list/range' not - is invalid
-                self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Bad S-FEEL '{!r}'".format(test))
+                else:
+                    self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
             if variableIsIn2:       # variable in('list/range') - is invalid
-                self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Bad S-FEEL '{!r}'".format(test))
+                else:
+                    self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
             if variableIsNot:               # Not specified - in either specified or implied
                 return self.data2sfeel(coordinate, sheet, variable + ' not(in ' + thisTest + ')', False)
@@ -667,13 +827,22 @@ class DMN():
                 theseTests.append(self.data2sfeel(coordinate, sheet, aTest, False))
             # Start putting the nots and ins back in - if they are valid
             if testIsIn:        # This is list of tests in variable - which is invalid S-FEEL
-                self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Bad S-FEEL '{!s}'".format(test))
+                else:
+                    self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
             if testIsNegated:       # variable in list of tests not in variable - which is invalid S-FEEL
-                self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Bad S-FEEL '{!s}'".format(test))
+                else:
+                    self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
             if variableIsIn1:       # variable in list of tests - is invalid - must be the in() function
-                self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Bad S-FEEL '{!s}'".format(test))
+                else:
+                    self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
             if variableIsNot:               # Not specified - either unary or function
                 return 'not(' + variable + ' in(' + ','.join(theseTests) + '))'
@@ -685,10 +854,16 @@ class DMN():
         if variableIsIn1 or variableIsIn2:
             # Check we don't have jumbled up in's and not's
             if testIsIn:        # This is 'variable in test in variable' - which is not supported
-                self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                else:
+                    self.errors.append("Bad S-FEEL '{!s}'".format(test))
                 return 'null'
             if testIsNegated:       # 'variable in test not' - is invalid
-                self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Bad S-FEEL '{!s}'".format(test))
+                else:
+                    self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
             if variableIsNot:               # 'not' - either specified or implied
                 if variableIsIn1:
@@ -742,7 +917,7 @@ class DMN():
         for key in value:
             if newValue != '{':
                 newValue += ','
-            newValue += '"' + key + '":'
+            newValue += key + ':'
             if isinstance(value[key], list):
                 newValue += self.list2sfeel(value[key])
             elif isinstance(value[key], dict):
@@ -822,7 +997,10 @@ class DMN():
             return (True, value, 'P%dDT%dH%dM%dS' % (days, hours, mins, secs))
         else:
             if failErrors:
-                self.errors.append("Invalid Data '{!r}' at '{!s}' on sheet '{!s}' - not a valid S-FEEL data type".format(value, coordinate, sheet))
+                if sheet is None:
+                    self.errors.append("Invalid Data '{!r}' - not a valid S-FEEL data type".format(value))
+                else:
+                    self.errors.append("Invalid Data '{!r}' at '{!s}' on sheet '{!s}' - not a valid S-FEEL data type".format(value, coordinate, sheet))
             return (True, None, None)
 
 
@@ -933,10 +1111,10 @@ class DMN():
     def mkNewItem(self, oldItem):
         # Construct a disambiguated item name
         breaker = 0
-        newItem = oldItem + '.' + str(breaker)
+        newItem = oldItem + '_' + str(breaker)
         while newItem in self.glossaryItems:
             breaker += 1
-            newItem = oldItem + '.' + str(breaker)
+            newItem = oldItem + '_' + str(breaker)
         return newItem
 
 
@@ -1058,6 +1236,10 @@ class DMN():
                             if item in self.glossaryItems:
                                 item = self.mkNewItem(item)
                             self.glossary[variable] = {}
+                            thisLen = len(variable)
+                            if thisLen not in self.glossaryLen:
+                                self.glossaryLen[thisLen] = []
+                            self.glossaryLen[thisLen].append(variable)
                             self.glossary[variable]['item'] = item
                             self.glossary[variable]['concept'] = 'Data'
                             self.glossary[variable]['annotations'] = []
@@ -1328,6 +1510,10 @@ class DMN():
                             if item in self.glossaryItems:
                                 item = self.mkNewItem(item)
                             self.glossary[variable] = {}
+                            thisLen = len(variable)
+                            if thisLen not in self.glossaryLen:
+                                self.glossaryLen[thisLen] = []
+                            self.glossaryLen[thisLen].append(variable)
                             self.glossary[variable]['item'] = item
                             self.glossary[variable]['concept'] = 'Data'
                             self.glossary[variable]['annotations'] = []
@@ -1533,6 +1719,10 @@ class DMN():
                         if item in self.glossaryItems:
                             item = self.mkNewItem(item)
                         self.glossary[variable] = {}
+                        thisLen = len(variable)
+                        if thisLen not in self.glossaryLen:
+                            self.glossaryLen[thisLen] = []
+                        self.glossaryLen[thisLen].append(variable)
                         self.glossary[variable]['item'] = item
                         self.glossary[variable]['concept'] = 'Data'
                         self.glossary[variable]['annotations'] = []
@@ -1597,6 +1787,10 @@ class DMN():
                         if item in self.glossaryItems:
                             item = self.mkNewItem(item)
                         self.glossary[variable] = {}
+                        thisLen = len(variable)
+                        if thisLen not in self.glossaryLen:
+                            self.glossaryLen[thisLen] = []
+                        self.glossaryLen[thisLen].append(variable)
                         self.glossary[variable]['item'] = item
                         self.glossary[variable]['concept'] = 'Data'
                         self.glossary[variable]['annotations'] = []
@@ -1696,6 +1890,10 @@ class DMN():
                         if item in self.glossaryItems:
                             item = self.mkNewItem(item)
                         self.glossary[variable] = {}
+                        thisLen = len(variable)
+                        if thisLen not in self.glossaryLen:
+                            self.glossaryLen[thisLen] = []
+                        self.glossaryLen[thisLen].append(variable)
                         self.glossary[variable]['item'] = item
                         self.glossary[variable]['concept'] = 'Data'
                         self.glossary[variable]['annotations'] = []
@@ -1775,8 +1973,9 @@ class DMN():
                         (isFixed, fixedValue, result) = self.excel2sfeel(thisCell, thisDataType, False, coordinate, sheet, failErrors)
                         if result is None:
                             return (rows, cols, -1)
+                    rank = None
                     # print("Setting result at '{!s}' on sheet '{!s}' to '{!s}'".format(coordinate, sheet, result))
-                    self.rules[table][thisRule]['outputs'].append((name, result, 0, 0, isFixed, fixedValue, coordinate, sheet))
+                    self.rules[table][thisRule]['outputs'].append((name, result, 0, rank, isFixed, fixedValue, coordinate, sheet))
                     thisRule += 1
 
         return (rows, cols, len(self.rules[table]))
@@ -1817,6 +2016,7 @@ class DMN():
             status['errors'] = self.errors
             return status        
         return self.use(wb)
+
 
     def use(self, workbook):
         """
@@ -1862,6 +2062,7 @@ class DMN():
         except (KeyError):
             self.haveGlossary = False
         self.glossary = {}
+        self.glossaryLen = {}
         self.glossaryItems = {}
         self.glossaryConcepts = {}
         self.glossaryLoaded = False
@@ -1936,6 +2137,7 @@ class DMN():
                         status['errors'] = self.errors
                         return status
                 if concept is not None:
+                    concept = concept.replace(' ', '_')
                     if re.search(self.badFEELchars, concept) is not None:
                         self.errors.append("Bad Business Concept '{!s}' in Glossary at '{!s}'".format(concept, coordinate))
                         status = {}
@@ -1955,13 +2157,23 @@ class DMN():
                     thisConcept = concept
                 attribute = cell.offset(row=thisRow, column=2).value
                 coordinate = cell.offset(row=thisRow, column=2).coordinate
-                if (attribute is None) or (re.search(self.badFEELchars, attribute) is not None):
+                if attribute is None:
+                    self.errors.append("Bad Business Attribute '{!s}' for Variable '{!s}' in Business in Concept '{!s}' in Glossary at '{!s}'".format(attribute, variable, thisConcept, coordinate))
+                    status = {}
+                    status['errors'] = self.errors
+                    return status
+                attribute = attribute.replace(' ', '_')
+                if re.search(self.badFEELchars, attribute) is not None:
                     self.errors.append("Bad Business Attribute '{!s}' for Variable '{!s}' in Business in Concept '{!s}' in Glossary at '{!s}'".format(attribute, variable, thisConcept, coordinate))
                     status = {}
                     status['errors'] = self.errors
                     return status
                 item = thisConcept + '.' + attribute
                 self.glossary[variable] = {}
+                thisLen = len(variable)
+                if thisLen not in self.glossaryLen:
+                    self.glossaryLen[thisLen] = []
+                self.glossaryLen[thisLen].append(variable)
                 self.glossary[variable]['item'] = item
                 self.glossary[variable]['concept'] = thisConcept
                 self.glossary[variable]['annotations'] = []
@@ -2058,6 +2270,10 @@ class DMN():
                             if item in self.glossaryItems:
                                 item = self.mkNewItem(item)
                             self.glossary[variable] = {}
+                            thisLen = len(variable)
+                            if thisLen not in self.glossaryLen:
+                                self.glossaryLen[thisLen] = []
+                            self.glossaryLen[thisLen].append(variable)
                             self.glossary[variable]['item'] = item
                             self.glossary[variable]['concept'] = 'Data'
                             self.glossary[variable]['attributes'] = []
@@ -2139,7 +2355,6 @@ class DMN():
             self.decisionHeading = [inputColumns] + inputVariables
 
         # Now search for the Decision Tables
-        theseTables = []
         theseInputs = {}
         theseOutputs = {}
         for sheet in self.wb.sheetnames:
@@ -2157,7 +2372,7 @@ class DMN():
                     thisCell = cell.value
                     if cell.data_type == 's':
                         # Set up self.decisionTables and self.rules for this decision table
-                        # self.glossary, self.glossaryItems and self.glossaryConcepts['Data'] may also be updated
+                        # self.glossary, self.glossaryLen, self.glossaryItems and self.glossaryConcepts may also be updated
                         table = cell.value
                         table = str(table).strip()
                         if table in self.decisionTables:
@@ -2167,11 +2382,9 @@ class DMN():
                             # However, if it fails, self.glossary, self.glossaryItems and self.glossaryConcepts could have be updated
                             # Fortunately, all updates will be 'additions', so a shallow copy will be sufficent to restore things if this fails
                             savedGlossary = self.glossary.copy()
+                            savedGlossaryLen = self.glossaryLen.copy()
                             savedGlossaryItems = self.glossaryItems.copy()
-                            if 'Data' in self.glossaryConcepts:
-                                savedGlossaryConcepts = self.glossaryConcepts['Data'].copy()
-                            else:
-                                savedGlossaryConcepts = None
+                            savedGlossaryConcepts = self.glossaryConcepts.copy()
                             failErrors = False
                             self.decisionTables[table] = {}
                             self.decisionTables[table]['name'] = 'Decide ' + table
@@ -2187,9 +2400,9 @@ class DMN():
                                 del self.decisionTables[table]
                                 del self.rules[table]
                                 self.glossary = savedGlossary
+                                self.glossaryLen = savedGlossaryLen
                                 self.glossaryItems = savedGlossaryItems
-                                if savedGlossaryConcepts is not None:
-                                    self.glossaryConcepts['Data'] = savedGlossaryConcepts
+                                self.glossaryConcepts = savedGlossaryConcepts
                                 continue
                         elif rules == 0:
                             self.errors.append("Decision table '{!s}' has no rules".format(thisCell))
@@ -2234,7 +2447,6 @@ class DMN():
                                 return status
 
                         if not haveDecision:        # Save the tables, inputs and outputs so we can create self.decisions
-                            theseTables.append(table)
                             theseInputs[table] = []
                             theseOutputs[table] = []
                             if 'inputColumns' in self.decisionTables[table]:
@@ -2245,14 +2457,31 @@ class DMN():
                                     theseInputs[table].append(self.decisionTables[table]['inputRows'][i]['name'])
                             if 'outputColumns' in self.decisionTables[table]:
                                 for i in range(len(self.decisionTables[table]['outputColumns'])):
-                                    theseOutputs[table].append(self.decisionTables[table]['outputColumns'][i]['name'])
-                                pass
+                                    if self.decisionTables[table]['outputColumns'][i]['name'] == 'Execute':
+                                        for rule in range(len(self.rules[table])):
+                                            (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][rule]['outputs'][i]
+                                            if result is not None:
+                                                theseOutputs[table].append((True, result))
+                                    else:
+                                        theseOutputs[table].append((False, self.decisionTables[table]['outputColumns'][i]['name']))
                             if 'outputRows' in self.decisionTables[table]:
                                 for i in range(len(self.decisionTables[table]['outputRows'])):
-                                    theseOutputs[table].append(self.decisionTables[table]['outputRows'][i]['name'])
-                                pass
+                                    if self.decisionTables[table]['outputRows'][i]['name'] == 'Execute':
+                                        for rule in range(len(self.rules[table])):
+                                            (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][rule]['outputs'][i]
+                                            if result is not None:
+                                                theseOutputs[table].append((True, result))
+                                    else:
+                                        theseOutputs[table].append((False, self.decisionTables[table]['outputRows'][i]['name']))
                             if 'output' in self.decisionTables[table]:
-                                theseOutputs[table].append(self.decisionTables[table]['output']['name'])
+                                if self.decisionTables[table]['output']['name'] == 'Execute':
+                                    for rule in range(len(self.rules[table])):
+                                        for i in range(len(self.rules[table][rule]['outputs'])):
+                                            (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][rule]['outputs'][i]
+                                            if result is not None:
+                                                theseOutputs[table].append((True, result))
+                                else:
+                                    theseOutputs[table].append((False, self.decisionTables[table]['output']['name']))
                       
                         # Symbolically merge all the cells in this table
                         thisRow = cell.row
@@ -2478,10 +2707,14 @@ class DMN():
                             else:
                                 result = sfeelText
                     if isFixed and (variable != 'Execute'):
-                        if fixedValue in self.decisionTables[table]['outputValidity'][outputIndex]:
-                            rank = self.decisionTables[table]['outputValidity'][outputIndex].index(fixedValue)
-                        else:
-                            rank = -1
+                        if len(self.decisionTables[table]['outputValidity'][outputIndex]) > 0:
+                            if fixedValue in self.decisionTables[table]['outputValidity'][outputIndex]:
+                                rank = self.decisionTables[table]['outputValidity'][outputIndex].index(fixedValue)
+                            else:
+                                self.errors.append("Invalid Output value in table '{!s}' at '{!s}' on sheet '{!s}'".format(table, coordinate, sheet))
+                                status = {}
+                                status['errors'] = self.errors
+                                return status
                     if variable == 'Execute':
                         if isFixed and isinstance(fixedValue, str):
                             if (fixedValue[0] == '"') and (fixedValue[-1] == '"'):
@@ -2502,33 +2735,12 @@ class DMN():
                 return status
 
         if not haveDecision:            # Build up self.decision of possible
-            self.decisionName = 'pyDMNrules computed'
-            self.decisionHeading = [0, 'Decisions', 'Execute Decision Tables']
-            while len(theseTables) > 0:
-                for i in range(len(theseTables)):           # Check every table looking for tables with no dependencies
-                    thisTable = theseTables[i]
-                    thisTableOK = True
-                    for j in range(len(theseTables)):
-                        if i == j:                          # Ignore self references
-                            continue
-                        thatTable = theseTables[j]
-                        for k in range(len(theseOutputs[thatTable])):
-                            if theseOutputs[thatTable][k] in theseInputs[thisTable]:
-                                thisTableOK = False         # Dependency clash - try the next table
-                                break
-                        if not thisTableOK:
-                            break
-                    if  thisTableOK:
-                        if thisTable not in self.otherDecisions:
-                            self.decisions.append((thisTable, 'Decide ' + thisTable, [], []))
-                        tableAt = i
-                        break
-                else:
+            theseTables = self.buildDecision(theseInputs, theseOutputs)
+            if len(theseTables) > 0:
                     self.errors.append("Dependency deadly embrace between tables '{!s}'".format(','.join(theseTables)))
                     status = {}
                     status['errors'] = self.errors
                     return status
-                del theseTables[tableAt]
 
         self.isLoaded = True
         if 'Test'  in self.wb:
@@ -2540,6 +2752,55 @@ class DMN():
             status['errors'] = self.errors
         return status
 
+
+    def checkTableDependency(self, table, theseTables, theseInputs, theseOutputs, depth, checked):
+        # A table has no dependencies if
+        #  - none of it's inputs are outputs of other tables
+        #  - and it calls no tables, or every table it calls has no dependencies
+        checked.append(table)
+        if depth > 100:         # Check for too much recursion
+            return False
+        for thisInput in theseInputs[table]:
+            for thatTable in theseTables:
+                if thatTable == table:
+                    continue
+                for isTable, outputName in theseOutputs[thatTable]:
+                    if isTable:
+                        continue
+                    if thisInput == outputName:
+                        return False
+        # If this table calls another table, then that table needs to have no dependencies as well
+        for isTable, outputName in theseOutputs[table]:
+            if isTable:
+                if outputName in checked:       # Check for cyclical dependency
+                    return False
+                if table not in checked:
+                    checked.append(table)
+                depth += 1
+                tableIsOK = self.checkTableDependency(outputName, theseTables, theseInputs, theseOutputs, depth, checked)
+                if not tableIsOK:
+                    return False
+        return True
+    
+    
+    def buildDecision(self, theseInputs, theseOutputs):
+        # Build self.decision
+        self.decisionName = 'pyDMNrules computed'
+        self.decisionHeading = [0, 'Decisions', 'Execute Decision Tables']
+        theseTables  = list(self.decisionTables)
+        while len(theseTables) > 0:
+            for i in range(len(theseTables)):           # Check every table looking for tables with no dependencies
+                thisTable = theseTables[i]
+                thisTableOK = self.checkTableDependency(thisTable, theseTables, theseInputs, theseOutputs, 0, [])
+                if thisTableOK:
+                    if thisTable not in self.otherDecisions:
+                        self.decisions.append((thisTable, 'Decide ' + thisTable, [], []))
+                    tableAt = i
+                    break
+            else:
+                return theseTables
+            del theseTables[tableAt]
+        return theseTables
 
 
     def loadXML(self, DMNxmlFile):
@@ -2572,6 +2833,7 @@ class DMN():
             return status        
         return self.useXML(text)
 
+
     def useXML(self, text):
         """
         Use a DMN XML compliant string 
@@ -2591,6 +2853,16 @@ class DMN():
             then use() encountered one or more errors and status['error'] is the list of those errors
 
         """
+
+        # We need is a glossary, some decisionTables, some rules and a decision order
+        self.glossary = {}
+        self.glossaryLen = {}
+        self.glossaryItems = {}
+        self.glossaryConcepts = {}
+        self.glossaryConcepts['Data'] = []
+        self.glossaryNames = ['glossary']
+        self.glossaryLoaded = False
+        self.isLoaded = False
 
         self.errors = []
 
@@ -2615,42 +2887,243 @@ class DMN():
                 ns[attrib[6:]] = root.get(attrib)
 
         if root.tag != DMN + 'definitions':
-            self.errors.append('Invalid XML')
+            self.errors.append('Invalid XML - no definitions')
             status = {}
             status['errors'] = self.errors
             return status
         if 'name' not in root.keys():
-            self.errors.append('Invalid XML')
+            self.errors.append('Invalid XML - definitions has no name')
             status = {}
             status['errors'] = self.errors
             return status
         self.decisionName = root.get('name')
 
-        # We need is a glossary, some decisionTables, some rules and a decision order
-        self.glossary = {}
-        self.glossaryItems = {}
-        self.glossaryConcepts = {}
-        self.glossaryConcepts['Data'] = []
-        self.glossaryNames = ['glossary']
-        self.glossaryLoaded = False
         self.dataNum = 0    # We may have to make up input and output variable names
         self.decisionHeading = [0, 'Decisions', 'Execute Decision Tables']      # There are no input tests and there may be no annotations
+        self.decisions = []
+        self.otherDecisions = []
         self.decisionTables = {}
 
-        XMLdecisions = []
-        self.rules = {}
-        tableNum = 0
+        XMLitemDefinitions = {}
+        for itemDefinition in root.iter(DMN + 'itemDefinition'):
+            if 'name' not in itemDefinition.keys():
+                self.errors.append('Invalid XML - an itemDefinition has no name')
+                status = {}
+                status['errors'] = self.errors
+                return status
+            thisName = itemDefinition.get('name')
+            XMLitemDefinitions[thisName] = itemDefinition
+        XMLvariables = {}
+        for inputData in root.iter(DMN + 'inputData'):
+            thisVariable = inputData.find('variable', namespaces=ns)
+            if thisVariable is None:
+                continue
+            if 'name' not in thisVariable.keys():
+                self.errors.append('Invalid XML - inputData/variable has no name')
+                status = {}
+                status['errors'] = self.errors
+                return status
+            variable = thisVariable.get('name')
+            if 'typeRef' not in thisVariable.keys():
+                continue
+            typeRef = thisVariable.get('typeRef')
+            if variable in XMLvariables:
+                self.errors.append("Invalid XML: multiple definisions for '{!s}'".format(variable))
+                status = {}
+                status['errors'] = self.errors
+                return status
+            XMLvariables[variable] = typeRef
+        confDecisions = []
+        XMLdecisionBindings = {}
+        XMLdecisionVariables = {}
         for decision in root.iter(DMN + 'decision'):
+            confDecisions.append(('2', decision))
+        for decision in root.iter(DMN + 'businessKnowledgeModel'):
+            confDecisions.append(('3', decision))
+        for confLevel, decision in confDecisions:
             if 'id' not in decision.keys():     # Required for decision linkage/dependency
-                self.errors.append('Invalid XML')
+                self.errors.append('Invalid XML - missing decision/businessKnowledge id attribute')
                 status = {}
                 status['errors'] = self.errors
                 return status
             if 'name' not in decision.keys():
-                self.errors.append('Invalid XML')
+                self.errors.append('Invalid XML - missing decision/businessKnowledge name attribute')
                 status = {}
                 status['errors'] = self.errors
                 return status
+            invocation = decision.find('invocation', namespaces=ns)
+            if invocation is not None:
+                literal = invocation.find('literalExpression', namespaces=ns)
+                text = literal.find('text', namespaces=ns)
+                name = text.text
+                XMLdecisionBindings[name] = {}
+                bindings = invocation.findall('binding', namespaces=ns)
+                for binding in bindings:
+                    parameter = binding.find('parameter', namespaces=ns)
+                    parameterName = parameter.get('name')
+                    thisLiteral = binding.find('literalExpression', namespaces=ns)
+                    thisText = thisLiteral.find('text', namespaces=ns)
+                    XMLdecisionBindings[name][parameterName] = thisText.text
+        for confLevel, decision in confDecisions:
+            decisionName = decision.get('name')
+            variables = decision.findall('variable', namespaces=ns)
+            for variable in variables:
+                if ('name' in variable.keys()) and ('typeRef' in variable.keys()):
+                    name = variable.get('name')
+                    typeRef = variable.get('typeRef')
+                    if (decisionName in XMLdecisionBindings) and (name in XMLdecisionBindings[decisionName]):
+                        XMLvariables[XMLdecisionBindings[decisionName][name]] = typeRef
+                    else:
+                        XMLvariables[name] = typeRef
+                    if decisionName not in XMLdecisionVariables:
+                        XMLdecisionVariables[decisionName] = []
+                    XMLdecisionVariables[decisionName].append(name)
+            theseTables = list(decision.findall('decisionTable', namespaces=ns))
+            encapsulatedLogic = decision.find('encapsulatedLogic', namespaces=ns)
+            if encapsulatedLogic is not None:
+                for parameter in encapsulatedLogic.findall('formalParameter', namespaces=ns):
+                    if 'name' not in parameter.keys():
+                        self.errors.append('Invalid XML')
+                        status = {}
+                        status['errors'] = self.errors
+                        return status
+                    thisName = parameter.get('name')
+                    if 'typeRef' in parameter.keys():
+                        if (decisionName in XMLdecisionBindings) and (thisName in XMLdecisionBindings[decisionName]):
+                            XMLvariables[XMLdecisionBindings[decisionName][thisName]] = typeRef
+                        else:
+                            XMLitemDefinitions[thisName] = parameter
+                theseTables += list(encapsulatedLogic.findall('decisionTable', namespaces=ns))
+            for thisTable in theseTables:
+                inputs = thisTable.findall('input', namespaces=ns)
+                for thisInput in inputs:
+                    if 'label' in thisInput.keys():
+                        variable = thisInput.get('label')
+                        if (thisTable in XMLdecisionBindings) and (variable in XMLdecisionBindings[thisTable]):
+                            variable = XMLdecisionBindings[thisTable][variable]
+                        if variable not in XMLvariables:
+                            inputExpression = thisInput.find('inputExpression', namespaces=ns)
+                            if (inputExpression is not None) and ('typeRef' in inputExpression.keys()):
+                                typeRef = inputExpression.get('typeRef')
+                                if (decisionName in XMLdecisionBindings) and (variable in XMLdecisionBindings[decisionName]):
+                                    XMLvariables[XMLdecisionBindings[decisionName][variable]] = typeRef
+                                else:
+                                    XMLvariables[variable] = typeRef
+                outputs = thisTable.findall('output', namespaces=ns)
+                for thisOutput in outputs:
+                    if 'label' in thisOutput.keys():
+                        variable = thisOutput.get('label')
+                        if (thisTable in XMLdecisionBindings) and (variable in XMLdecisionBindings[thisTable]):
+                            variable = XMLdecisionBindings[thisTable][variable]
+                        elif (decisionName in XMLdecisionVariables) and (len(XMLdecisionVariables[decisionName]) == 1) and (len(outputs) == 1):
+                            variable = XMLdecisionVariables[decisionName][0]
+                        if variable not in XMLvariables:
+                            outputExpression = thisOutput.find('inputExpression', namespaces=ns)
+                            if (outputExpression is not None) and ('typeRef' in outputExpression.keys()):
+                                typeRef = outputExpression.get('typeRef')
+                                XMLvariables[variable] = typeRef
+
+        for variable in XMLvariables:
+            typeRef = XMLvariables[variable]
+            if typeRef in XMLitemDefinitions:
+                components = XMLitemDefinitions[typeRef].findall('itemComponent', namespaces=ns)
+                if len(components) > 0:     # This is a Context, which we map to a Business Concept with Business Attributes
+                    concept = variable.replace(' ', '_')
+                    if re.search(self.badFEELchars, concept) is not None:
+                        self.errors.append("Invalid XML:b Bad Business Concept '{!s}'".format(concept))
+                        status = {}
+                        status['errors'] = self.errors
+                        return status
+                    if concept[0].isdigit():
+                        self.errors.append("Invalid XML: Bad Business Concept '{!s}'".format(concept))
+                        status = {}
+                        status['errors'] = self.errors
+                        return status
+                    if concept in self.glossaryConcepts:
+                        self.errors.append("Invalid XML: multiple definisions for '{!s}'".format(concept))
+                        status = {}
+                        status['errors'] = self.errors
+                        return status
+                    self.glossaryConcepts[concept] = []
+                    theseAttributes = self.XMLgetContextItems(None, components, ns)
+                    for thisAttribute in theseAttributes:
+                        thisVariable = concept + '.' + thisAttribute
+                        if thisVariable in self.glossary:
+                            self.errors.append("Invalid XML: multiple definisions for '{!s}'".format(thisVariable))
+                            status = {}
+                            status['errors'] = self.errors
+                            return status
+                        item = thisVariable
+                        self.glossary[thisVariable] = {}
+                        thisLen = len(thisVariable)
+                        if thisLen not in self.glossaryLen:
+                            self.glossaryLen[thisLen] = []
+                        self.glossaryLen[thisLen].append(thisVariable)
+                        self.glossary[thisVariable]['item'] = item
+                        self.glossary[thisVariable]['concept'] = concept
+                        self.glossaryItems[item] = thisVariable
+                        self.glossaryConcepts[concept].append(thisVariable)
+                        annotation = typeRef
+                        thisTypeRef = theseAttributes[thisAttribute]
+                        if thisTypeRef is not None:
+                            annotation = '(' + thisTypeRef.text + ')'
+                        if annotation is not None:
+                            self.glossary[thisVariable]['annotations'] = [annotation]
+                            if len(self.glossaryNames) == 1:
+                                self.glossaryNames.append('Annotation')
+                        else:
+                            self.glossary[thisVariable]['annotations'] = []
+                    continue
+        for variable in XMLvariables:
+            typeRef = XMLvariables[variable]
+            if typeRef in XMLitemDefinitions:
+                components = XMLitemDefinitions[typeRef].findall('itemComponent', namespaces=ns)
+                if len(components) > 0:     # This is a Context, which we map to a Business Concept with Business Attributes
+                    continue
+            if variable not in self.glossary:
+                hasDot = variable.find('.')
+                if hasDot != -1:
+                    thisConcept = variable[0:hasDot]
+                    thisItem = variable[hasDot + 1:]
+                    if (re.search(self.badFEELchars, thisConcept) is  None) and (re.search(self.badFEELchars, thisItem) is  None):
+                        concept = thisConcept
+                        item = thisItem
+                        if (concept in self.glossaryConcepts) and (item in self.glossaryConcepts[concept]):
+                            continue
+                else:
+                    concept = 'Data'
+                    attribute = re.sub(self.badFEELchars, '', variable.replace(' ', '_'))
+                    item = concept + '.' + attribute
+                if item in self.glossaryItems:
+                    item = self.mkNewItem(item)
+                self.glossary[variable] = {}
+                thisLen = len(variable)
+                if thisLen not in self.glossaryLen:
+                    self.glossaryLen[thisLen] = []
+                self.glossaryLen[thisLen].append(variable)
+                self.glossary[variable]['item'] = item
+                self.glossary[variable]['concept'] = concept
+                self.glossaryItems[item] = variable
+                if concept not in self.glossaryConcepts:
+                    self.glossaryConcepts[concept] = []
+                self.glossaryConcepts[concept].append(variable)
+                annotation = '(' + typeRef + ')'
+                if typeRef in XMLitemDefinitions:
+                    thisTypeRef = XMLitemDefinitions[typeRef].find('typeRef', namespaces=ns)
+                    if thisTypeRef is not None:
+                        annotation = '(' + thisTypeRef.text + ')'
+                if annotation is not None:
+                    self.glossary[variable]['annotations'] = [annotation]
+                    if len(self.glossaryNames) == 1:
+                        self.glossaryNames.append('Annotation')
+                else:
+                    self.glossary[variable]['annotations'] = []
+        
+        XMLdecisions = []
+        self.rules = {}
+        theseInputs = {}
+        theseOutputs = {}
+        for confLevel, decision in confDecisions:
             XMLdecisions.append({})
             XMLdecisions[-1]['id'] = decision.get('id')
             XMLdecisions[-1]['name'] = decision.get('name')
@@ -2676,21 +3149,267 @@ class DMN():
                         return status
 
             # There can be multiple decisionTable for each decision
-            for XMLdecisionTable in decision.findall('decisionTable', namespaces=ns):
+            theseTables = list(decision.findall('decisionTable', namespaces=ns))
+            encapsulatedLogic = decision.find('encapsulatedLogic', namespaces=ns)
+            if encapsulatedLogic is not None:
+                theseTables += list(encapsulatedLogic.findall('decisionTable', namespaces=ns))
+            if len(theseTables) == 0:           # Build up a dummy outputs only table
+                table = decision.get('name')
+                XMLdecisions[-1]['tables'].append(table)
+                XMLdecisions[-1]['annotations'][table] = []
+                self.decisionTables[table] = {}
+                self.decisionTables[table]['name'] = 'Decide ' + table
+                self.decisionTables[table]['inputValidity'] = []
+                self.decisionTables[table]['outputValidity'] = []
+                self.rules[table] = []
+                self.decisionTables[table]['hitPolicy'] = 'U'
+                self.decisionTables[table]['inputColumns'] = []
+                self.decisionTables[table]['outputColumns'] = []
+                theseInputs[table] = []
+                theseOutputs[table] = []
+                concept = 'Data'
+                outputConceptFound = False
+                outputConcept =  decision.find('variable', namespaces=ns)
+                if outputConcept is not None:
+                    thisConcept = outputConcept.get('name')
+                    thisConcept = thisConcept.replace(' ', '_')
+                    if thisConcept in self.glossaryConcepts:
+                        concept = thisConcept
+                        outputConceptFound = True
+                # Get all the decisionTable output variables and output values
+                outputs = []
+                if encapsulatedLogic is not None:
+                    decisionVariable = encapsulatedLogic.find('variable', namespaces=ns)
+                    literal = encapsulatedLogic.find('literalExpression', namespaces=ns)
+                    context = encapsulatedLogic.find('context', namespaces=ns)
+                    invocation = encapsulatedLogic.find('invocation', namespaces=ns)
+                else:
+                    decisionVariable = decision.find('variable', namespaces=ns)
+                    literal = decision.find('literalExpression', namespaces=ns)
+                    context = decision.find('context', namespaces=ns)
+                    invocation = decision.find('invocation', namespaces=ns)
+                if literal is not None:
+                    variable = decision.get('name')
+                    text = literal.find('text', namespaces=ns)
+                    outputValue = text.text
+                    theseOutputs[table].append((False, variable))
+                    outputs.append((variable, None, outputValue))
+                elif context is not None:
+                    contextEntries = context.findall('contextEntry', namespaces=ns)
+                    for thisEntry in contextEntries:
+                        variable = thisEntry.find('variable', namespaces=ns)
+                        if variable is None:
+                            continue
+                        variableName = variable.get('name')
+                        thisLiteral = thisEntry.find('literalExpression', namespaces=ns)
+                        thisInvocation = thisEntry.find('invocation', namespaces=ns)
+                        if thisLiteral is not None:
+                            text = thisLiteral.find('text', namespaces=ns)
+                            outputValue = text.text
+                            theseOutputs[table].append((False, variableName))
+                            if 'typeRef' in variable.keys():
+                                outputs.append((variableName, variable.get('typeRef'), outputValue))
+                            else:
+                                outputs.append((variableName, None, outputValue))
+                        elif thisInvocation is not None:
+                            thisVariable = 'Execute'
+                            literal = thisInvocation.find('literalExpression', namespaces=ns)
+                            text = literal.find('text', namespaces=ns)
+                            outputValue = text.text
+                            if outputValue not in self.otherDecisions:
+                                self.otherDecisions.append(outputValue)
+                            theseOutputs[table].append((True, outputValue))
+                            outputs.append((thisVariable, None, outputValue))
+                            if decisionVariable is not None:
+                                decisionVariableName = decisionVariable.get('name')
+                                for targetConfLevel, targetDecision in confDecisions:
+                                    if targetDecision.get('name') == outputValue:
+                                        targetVariable = targetDecision.find('variable', namespaces=ns)
+                                        if targetVariable is not None:
+                                            thisVariable = targetVariable.get('name')
+                                            outputs.append((decisionVariableName, None, thisVariable))
+                                            theseOutputs[table].append((False, decisionVariableName))
+                                            if thisVariable not in self.glossary:                            
+                                                attribute = re.sub(self.badFEELchars, '', thisVariable.replace(' ', '_'))
+                                                item = concept + '.' + attribute
+                                                if item in self.glossaryItems:
+                                                    item = self.mkNewItem(item)
+                                                self.glossary[thisVariable] = {}
+                                                thisLen = len(thisVariable)
+                                                if thisLen not in self.glossaryLen:
+                                                    self.glossaryLen[thisLen] = []
+                                                self.glossaryLen[thisLen].append(thisVariable)
+                                                self.glossary[thisVariable]['item'] = item
+                                                self.glossary[thisVariable]['concept'] = concept
+                                                self.glossaryItems[item] = thisVariable
+                                                if concept not in self.glossaryConcepts:
+                                                    self.glossaryConcepts[concept] = []
+                                                self.glossaryConcepts[concept].append(thisVariable)
+                                                annotation = None
+                                                if thisVariable in XMLvariables:
+                                                    annotation = '(' + XMLvariables[thisVariable] + ')'
+                                                elif (thisVariable == variable) and (variableTypeRef is not None):
+                                                    annotation = '(' + variableTypeRef + ')'
+                                                if annotation is not None:
+                                                    self.glossary[thisVariable]['annotations'] = [annotation]
+                                                    if len(self.glossaryNames) == 1:
+                                                        self.glossaryNames.append('Annotation')
+                                                else:
+                                                    self.glossary[thisVariable]['annotations'] = []
+                elif invocation is not None:
+                    variable = 'Execute'
+                    literal = invocation.find('literalExpression', namespaces=ns)
+                    text = literal.find('text', namespaces=ns)
+                    outputValue = text.text
+                    if outputValue not in self.otherDecisions:
+                        self.otherDecisions.append(outputValue)
+                    theseOutputs[table].append((True, outputValue))
+                    outputs.append((variable, None, outputValue))
+                    if decisionVariable is not None:
+                        decisionVariableName = decisionVariable.get('name')
+                        for targetConfLevel, targetDecision in confDecisions:
+                            if targetDecision.get('name') == outputValue:
+                                targetVariable = targetDecision.find('variable', namespaces=ns)
+                                if targetVariable is not None:
+                                    thisVariable = targetVariable.get('name')
+                                    outputs.append((decisionVariableName, None, thisVariable))
+                                    theseOutputs[table].append((False, decisionVariableName))
+                                    if thisVariable not in self.glossary:                            
+                                        attribute = re.sub(self.badFEELchars, '', thisVariable.replace(' ', '_'))
+                                        item = concept + '.' + attribute
+                                        if item in self.glossaryItems:
+                                            item = self.mkNewItem(item)
+                                        self.glossary[thisVariable] = {}
+                                        thisLen = len(thisVariable)
+                                        if thisLen not in self.glossaryLen:
+                                            self.glossaryLen[thisLen] = []
+                                        self.glossaryLen[thisLen].append(thisVariable)
+                                        self.glossary[thisVariable]['item'] = item
+                                        self.glossary[thisVariable]['concept'] = concept
+                                        self.glossaryItems[item] = thisVariable
+                                        if concept not in self.glossaryConcepts:
+                                            self.glossaryConcepts[concept] = []
+                                        self.glossaryConcepts[concept].append(thisVariable)
+                                        annotation = None
+                                        if thisVariable in XMLvariables:
+                                            annotation = '(' + XMLvariables[thisVariable] + ')'
+                                        elif (thisVariable == variable) and (variableTypeRef is not None):
+                                            annotation = '(' + variableTypeRef + ')'
+                                        if annotation is not None:
+                                            self.glossary[thisVariable]['annotations'] = [annotation]
+                                            if len(self.glossaryNames) == 1:
+                                                self.glossaryNames.append('Annotation')
+                                        else:
+                                            self.glossary[thisVariable]['annotations'] = []
+
+                # Now build the rule
+                self.rules[table].append({})
+                self.rules[table][-1]['ruleId'] = 'Rule.0'
+                self.rules[table][-1]['tests'] = []
+                self.rules[table][-1]['outputs'] = []
+                self.rules[table][-1]['annotation'] = []
+                outputIndex = 0
+                for variable, variableTypeRef, outputValue in outputs:
+                    thisVariable = variable
+                    if variable != 'Execute':
+                        if (table in XMLdecisionBindings) and (variable in XMLdecisionBindings[table]):
+                            thisVariable = XMLdecisionBindings[table][variable]
+                        attribute = re.sub(self.badFEELchars, '', thisVariable.replace(' ', '_'))
+                        dotAt = thisVariable.find('.')
+                        if dotAt != -1:
+                            varConcept = thisVariable[0:hasDot]
+                            varItem = thisVariable[hasDot + 1:]
+                            if (re.search(self.badFEELchars, varConcept) is  None) and (re.search(self.badFEELchars, varItem) is  None):
+                                thisConcept = varConcept
+                                item = varItem
+                                if (thisConcept in self.glossaryConcepts) and (item in self.glossaryConcepts[thisConcept]):
+                                    continue
+                        else:
+                            thisConcept = concept
+                            if outputConceptFound:
+                                thisVariable = concept + '.' + attribute
+                                item = thisVariable
+                            else:
+                                item = attribute
+                        if thisVariable not in self.glossary:
+                            if item in self.glossaryItems:
+                                item = self.mkNewItem(item)
+                            self.glossary[thisVariable] = {}
+                            thisLen = len(thisVariable)
+                            if thisLen not in self.glossaryLen:
+                                self.glossaryLen[thisLen] = []
+                            self.glossaryLen[thisLen].append(thisVariable)
+                            self.glossary[thisVariable]['item'] = item
+                            self.glossary[thisVariable]['concept'] = thisConcept
+                            self.glossaryItems[item] = thisVariable
+                            if thisConcept not in self.glossaryConcepts:
+                                self.glossaryConcepts[thisConcept] = []
+                            self.glossaryConcepts[thisConcept].append(thisVariable)
+                            annotation = None
+                            if thisVariable in XMLvariables:
+                                annotation = '(' + XMLvariables[thisVariable] + ')'
+                            elif (thisVariable == variable) and (variableTypeRef is not None):
+                                annotation = '(' + variableTypeRef + ')'
+                            if annotation is not None:
+                                self.glossary[thisVariable]['annotations'] = [annotation]
+                                if len(self.glossaryNames) == 1:
+                                    self.glossaryNames.append('Annotation')
+                            else:
+                                self.glossary[thisVariable]['annotations'] = []
+                    self.decisionTables[table]['outputColumns'].append({})
+                    self.decisionTables[table]['outputColumns'][-1]['name'] = thisVariable
+                    self.decisionTables[table]['outputValidity'].append([])
+                    if outputValue is None:
+                        self.errors.append('Invalid XML')
+                        status = {}
+                        status['errors'] = self.errors
+                        return status
+                    result = outputValue
+                    isFixed = False
+                    fixedValue = result
+                    if thisVariable != 'Execute':
+                        (replaced, result) = self.replaceVariable(result)
+                        theseInputs[table] += replaced
+                        sfeelText = self.data2sfeel(None, None, result, False)
+                        if sfeelText is None:
+                            isFixed = True
+                            if (result[0] == '"') and (result[-1] == '"'):
+                                fixedValue = result[1:-1]
+                            else:
+                                fixedValue = result
+                                result = '"' + result + '"'
+                        elif (len(sfeelText) > 1) and (sfeelText[0] == '"') and (sfeelText[-1] == '"') and (sfeelText[1:-1] == result):
+                            (replaced, newResult) = self.replaceItems(result)
+                            theseInputs[table] += replaced
+                            if newResult == result:
+                                isFixed = True
+                                if (result[0] == '"') and (result[-1] == '"'):
+                                    fixedValue = result[1:-1]
+                                else:
+                                    fixedValue = result
+                                    result = '"' + result + '"'
+                        else:
+                            result = sfeelText
+                    rank = None
+                    # print("Setting result '{!s}'  to '{!s}' ('{!s}'/'{!s}') with rank '{!s}'".format(thisVariable, result, isFixed, fixedValue, rank))
+                    self.rules[table][-1]['outputs'].append((thisVariable, result, outputIndex, rank, isFixed, fixedValue, None, None))
+                    outputIndex += 1
+                continue
+            for XMLdecisionTable in theseTables:
                 if 'label' in XMLdecisionTable.keys():
                     table = XMLdecisionTable.get('label')
                 elif 'name' in XMLdecisionTable.keys():
                     table = XMLdecisionTable.get('name')
-                elif 'id' in XMLdecisionTable.keys():
-                    table = XMLdecisionTable.get('id')
                 else:
-                    table = 'Table.' + str(tableNum)
-                    tableNum += 1
+                    table = decision.get('name')
                 XMLdecisions[-1]['tables'].append(table)
                 XMLdecisions[-1]['annotations'][table] = []
                 self.decisionTables[table] = {}
+                self.decisionTables[table]['name'] = 'Decide ' + table
                 self.decisionTables[table]['inputValidity'] = []
                 self.decisionTables[table]['outputValidity'] = []
+                theseInputs[table] = []
+                theseOutputs[table] = []
                 self.rules[table] = []
 
                 # Transform the XML HitPolicy to a pyDMNrules hitPolicy of ['U', 'F', 'P', 'A', 'C', 'C+', 'C#', 'C<', 'C>', 'R', 'O']
@@ -2725,6 +3444,21 @@ class DMN():
                     self.decisionTables[table]['inputRows'] = []
                     self.decisionTables[table]['output'] = {}
 
+                # Get the default decision ouput label
+                outputLabel = ''
+                if 'outputLabel' in XMLdecisionTable.keys():
+                    outputLabel = XMLdecisionTable.get('outputLabel')
+                else:
+                    decisionName = decision.get('name')
+                    if (decisionName in XMLdecisionVariables) and (len(XMLdecisionVariables[decisionName]) == 1):
+                        outputLabel = XMLdecisionVariables[decisionName][0]
+
+                # Get any table variables
+                tableXMLvariables = {}
+                for variable in XMLdecisionTable.findall('variable', namespaces=ns):
+                    if ('name' in variable.keys()) and ('typeRef' in variable.keys()):
+                        tableXMLvariables[variable.get('name')] = variable.get('typeRef')
+
                 # Get all the decisionTable annotations - these will be annotations in the Decisions table
                 for annotation in XMLdecisionTable.findall('annotation', namespaces=ns):
                     if 'name' in annotation.keys():
@@ -2732,29 +3466,11 @@ class DMN():
                 while len(XMLdecisions[-1]['annotations'][table]) > (len(self.decisionHeading) - 3):
                     self.decisionHeading.append('Annotation')
 
-
                 # Get all the decisionTable inputs
                 # Inputs should have a label (for linkage from outputs), must have an inputExpression and can have inputValues
                 crossNum = 0            # For CrossTable we alternate the allocate of inputs to rows/columns
                 inputs = []
                 for inputVariable in XMLdecisionTable.findall('input', namespaces=ns):
-                    if 'label' in inputVariable.keys():
-                        variable = inputVariable.get('label')
-                    elif 'id' in inputVariable.keys():
-                        variable = inputVariable.get('id')
-                    else:
-                        variable = 'Input.' + str(dataNum)
-                        dataNum += 1
-                    inputs.append(variable)
-                    if variable not in self.glossary:
-                        item = re.sub(self.badFEELchars, '', variable.replace(' ', '_'))
-                        if item in self.glossaryItems:
-                            item = self.mkNewItem(item)
-                        self.glossary[variable] = {}
-                        self.glossary[variable]['item'] = item
-                        self.glossary[variable]['concept'] = 'Data'
-                        self.glossaryItems[item] = variable
-                        self.glossaryConcepts['Data'].append(variable)
                     inputExpression = inputVariable.find('inputExpression', ns)
                     if inputExpression is None:
                         self.errors.append('Invalid XML')
@@ -2762,12 +3478,51 @@ class DMN():
                         status['errors'] = self.errors
                         return status
                     text = inputExpression.find('text', namespaces=ns)
+                    if text is None:
+                        self.errors.append('Invalid XML')
+                        status = {}
+                        status['errors'] = self.errors
+                        return status
+                    variable = text.text
+                    if 'label' in inputVariable.keys():
+                        variable = inputVariable.get('label')
+                    if (table in XMLdecisionBindings) and (variable in XMLdecisionBindings[table]):
+                        variable = XMLdecisionBindings[table][variable]
+                    if variable == '':
+                        variable = 'Input.' + str(dataNum)
+                        dataNum += 1
+                    inputs.append(variable)
+                    theseInputs[table].append(variable)
+                    if variable not in self.glossary:
+                        attribute = re.sub(self.badFEELchars, '', variable.replace(' ', '_'))
+                        item = 'Data' + '.' + attribute
+                        if item in self.glossaryItems:
+                            item = self.mkNewItem(item)
+                        self.glossary[variable] = {}
+                        thisLen = len(variable)
+                        if thisLen not in self.glossaryLen:
+                            self.glossaryLen[thisLen] = []
+                        self.glossaryLen[thisLen].append(variable)
+                        self.glossary[variable]['item'] = item
+                        self.glossary[variable]['concept'] = 'Data'
+                        self.glossaryItems[item] = variable
+                        self.glossaryConcepts['Data'].append(variable)
                     annotation = None
                     if 'typeRef' in inputExpression.keys():
-                        if text is None:
-                            annotation = '(' + inputExpression.get('typeRef') + ')'
+                        typeRef = inputExpression.get('typeRef')
+                        if typeRef in XMLitemDefinitions:
+                            thisTypeRef = XMLitemDefinitions[typeRef].find('typeRef', namespaces=ns)
+                            if thisTypeRef is not None:
+                                typeRef = thisTypeRef.text
+                                if typeRef.text is None:
+                                    annotation = '(' + typeRef + ')'
+                                else:
+                                    annotation = '(' + typeRef.text + ')'
+                            elif 'typeRef' in XMLitemDefinitions[typeRef].keys():
+                                thisTypeRef = XMLitemDefinitions[typeRef].get('typeRef')
+                                annotation = '(' + thisTypeRef + ')'
                         else:
-                            annotation = text.text + '(' + inputExpression.get('typeRef') + ')'
+                            annotation = '(' + typeRef + ')'
                     else:
                         if text is not None:
                             annotation = text.text
@@ -2791,15 +3546,26 @@ class DMN():
                             self.decisionTables[table]['inputRows'].append({})
                             self.decisionTables[table]['inputRows'][-1]['name'] = variable
                         crossNum += 1
-                    inputValues = inputVariable.find('inputValues', namespaces=ns)
-                    if inputValues is not None:
-                        text = inputValues.find('text', namespaces=ns)
+                    allowed = inputVariable.find('inputValues', ns)
+                    if (allowed is None) and ('typeRef' in inputVariable.keys()) and (inputVariable.get('typeRef') in XMLitemDefinitions):
+                        typeRef = inputVariable.get('typeRef')
+                        allowed = XMLitemDefinitions[typeRef].find('allowedValues', namespaces=ns)
+                    if allowed is not None:
+                        text = allowed.find('text', namespaces=ns)
                         if text is None:
                             self.errors.append('Invalid XML')
                             status = {}
                             status['errors'] = self.errors
                             return status
                         validityTest = text.text
+                        if annotation is not None:
+                            self.glossary[variable]['annotations'] = [validityTest + ' ' + annotation]
+                        else:
+                            self.glossary[variable]['annotations'] = [validityTest]
+                            if len(self.glossaryNames) == 1:
+                                self.glossaryNames.append('Annotation')
+                        isFixed = False
+                        fixedValue = validityTest
                         FEELname = self.glossary[variable]['item']
                         # Update isFixed and fixed value if possible
                         if validityTest.find(',') == -1:          # Not a list - treat a simple string
@@ -2852,18 +3618,34 @@ class DMN():
                 outputs = []
                 for outputVariable in XMLdecisionTable.findall('output', namespaces=ns):
                     if 'label' in outputVariable.keys():
-                        variable = outputVariable.get('label')
-                    elif 'id' in outputVariable.keys():
-                        variable = outputVariable.get('id')
+                        if outputLabel != '':
+                            variable = outputLabel
+                        else:
+                            variable = outputVariable.get('label')
+                    elif 'name' in outputVariable.keys():
+                        if outputLabel != '':
+                            variable = outputLabel + '.' + outputVariable.get('name')
+                        else:
+                            variable = outputVariable.get('name')
+                    elif outputLabel != '':
+                        variable = outputLabel
+                        outputLabel = ''
                     else:
                         variable = 'Output.' + str(dataNum)
                         dataNum += 1
                     outputs.append(variable)
+                    theseOutputs[table].append((False, variable))
+                    annotation = None
                     if variable not in self.glossary:
-                        item = re.sub(self.badFEELchars, '', variable.replace(' ', '_'))
+                        attribute = re.sub(self.badFEELchars, '', variable.replace(' ', '_'))
+                        item = 'Data' + '.' + attribute
                         if item in self.glossaryItems:
                             item = self.mkNewItem(item)
                         self.glossary[variable] = {}
+                        thisLen = len(variable)
+                        if thisLen not in self.glossaryLen:
+                            self.glossaryLen[thisLen] = []
+                        self.glossaryLen[thisLen].append(variable)
                         self.glossary[variable]['item'] = item
                         self.glossary[variable]['concept'] = 'Data'
                         self.glossaryItems[item] = variable
@@ -2877,23 +3659,47 @@ class DMN():
                                 self.glossaryNames.append('Annotation')
                         else:
                             self.glossary[variable]['annotations'] = []
+                    defaultOutput = outputVariable.find('defaultOutputEntry', namespaces=ns)
+                    if defaultOutput is not None:
+                        defaultText = defaultOutput.find('text', namespaces=ns)
+                        if defaultText is None:
+                            self.errors.append('Invalid XML')
+                            status = {}
+                            status['errors'] = self.errors
+                            return status
                     if preferredOrientation == 'Rule-as-Row':
                         self.decisionTables[table]['outputColumns'].append({})
                         self.decisionTables[table]['outputColumns'][-1]['name'] = variable
+                        if defaultOutput is not None:
+                            self.decisionTables[table]['outputColumns'][-1]['default'] = defaultText.text
                     elif preferredOrientation == 'Rule-as-Column':
                         self.decisionTables[table]['outputRows'].append({})
                         self.decisionTables[table]['outputRows'][-1]['name'] = variable
+                        if defaultOutput is not None:
+                            self.decisionTables[table]['outputRows'][-1]['default'] = defaultText.text
                     else:
                         self.decisionTables[table]['output']['name'] = variable
-                    outputValues = outputVariable.find('outputValues', namespaces=ns)
-                    if outputValues is not None:
-                        text = outputValues.find('text', namespaces=ns)
+                        if defaultOutput is not None:
+                            self.decisionTables[table]['output']['default'] = defaultText.text
+                    allowed = outputVariable.find('outputValues', ns)
+                    if (allowed is None) and ('typeRef' in outputVariable.keys()) and (outputVariable.get('typeRef') in XMLitemDefinitions):
+                        typeRef = outputVariable.get('typeRef')
+                        allowed = XMLitemDefinitions[typeRef].find('allowedValues', namespaces=ns)
+                    if allowed is not None:
+                        text = allowed.find('text', namespaces=ns)
                         if text is None:
                             self.errors.append('Invalid XML')
                             status = {}
                             status['errors'] = self.errors
                             return status
                         validityTest = text.text
+                        if annotation is not None:
+                            self.glossary[variable]['annotations'] = [validityTest + ' ' + annotation]
+                        else:
+                            self.glossary[variable]['annotations'] = [validityTest]
+                            if len(self.glossaryNames) == 1:
+                                self.glossaryNames.append('Annotation')
+                        fixedValue = validityTest
                         newValidity = []
                         if not isinstance(validityTest, str):
                             newValidity = [validityTest]
@@ -2936,8 +3742,6 @@ class DMN():
                 for rule in XMLdecisionTable.findall('rule', namespaces=ns):
                     if 'label' in rule.keys():
                         ruleId = rule.get('label')
-                    elif 'id' in rule.keys():
-                        ruleId = rule.get('id')
                     else:
                         ruleId = 'Rule.' + str(ruleNum)
                         ruleNum += 1
@@ -2948,7 +3752,6 @@ class DMN():
                     self.rules[table][-1]['tests'] = []
                     self.rules[table][-1]['outputs'] = []
                     self.rules[table][-1]['annotation'] = []
-                    inputNum = 0
                     for inputEntry in rule.findall('inputEntry', namespaces=ns):
                         text = inputEntry.find('text', namespaces=ns)
                         if text is None:
@@ -2957,10 +3760,16 @@ class DMN():
                             status['errors'] = self.errors
                             return status
                         test = text.text
+                        if test == '-':
+                            inputNum += 1
+                            continue
+                        isFixed = False
+                        fixedValue = test
                         if test is not None:
                             variable = inputs[inputNum]
                             FEELname = self.glossary[variable]['item']
                             (replaced, test) = self.replaceVariable(test)
+                            theseInputs[table] += replaced
                             test = self.test2sfeel(FEELname, None, None, test)
                             isFixed = False
                             fixedValue = None
@@ -2997,7 +3806,10 @@ class DMN():
                             status['errors'] = self.errors
                             return status
                         result = text.text
+                        isFixed = False
+                        fixedValue = result
                         (replaced, result) = self.replaceVariable(result)
+                        theseInputs[table] += replaced
                         sfeelText = self.data2sfeel(None, None, result, False)
                         if sfeelText is None:
                             isFixed = True
@@ -3018,7 +3830,7 @@ class DMN():
                         else:
                             result = sfeelText
                         variable = outputs[outputNum]
-                        rank = 0
+                        rank = None
                         self.rules[table][-1]['outputs'].append((variable, result, outputNum, rank, isFixed, fixedValue, None, None))
                         outputNum += 1
                     for annotationEntry in rule.findall('annotationEntry', namespaces=ns):
@@ -3036,50 +3848,19 @@ class DMN():
                     status['errors'] = self.errors
                     return status
 
-        if len(XMLdecisions) == 0:
+        if len(self.decisionTables) == 0:
             self.errors.append("Decision '{!s}' has no decision tables".format(self.decisionName))
             status = {}
             status['errors'] = self.errors
             return status
 
         # Now build a decision order
-        self.decisions = []
-        while True:
-            somethingDone = False
-            toDoId = None
-            for i in range(len(XMLdecisions)):
-                if XMLdecisions[i]['done']:     # Already done
-                    continue
-                toDoId = XMLdecisions[i]['name']
-                skipMe = False
-                for j in range(len(XMLdecisions[i]['required'])):       # Check that all the required decisions are done
-                    needId = XMLdecisions[i]['required'][j]
-                    for k in range(len(XMLdecisions)):
-                        if needId != XMLdecisions[k]['id']:     # Not this one
-                            continue
-                        if not XMLdecisions[k]['done']:         # Can't do this 'i' now as it has dependancies that are not done
-                            skipMe = True
-                            break
-                    else:
-                        skipMe = False
-                        break
-                if not skipMe:
-                    # Do XMLdecisions[i]
-                    name = XMLdecisions[i]['name']
-                    for j in range(len(XMLdecisions[i]['tables'])):
-                        table = XMLdecisions[i]['tables'][j]
-                        self.decisions.append((table, name, [], XMLdecisions[i]['annotations'][table]))
-                        self.decisionTables[table]['name'] = 'Decide ' + name
-                    XMLdecisions[i]['done'] = True
-                    somethingDone = True
-            if somethingDone:       # Something done - see if there's more to do
-                continue
-            if toDoId is not None:
-                self.errors.append('Decision Tables deadly embrace')
+        theseTables = self.buildDecision(theseInputs, theseOutputs)
+        if len(theseTables) > 0:
+                self.errors.append("Dependency deadly embrace between tables '{!s}'".format(','.join(theseTables)))
                 status = {}
                 status['errors'] = self.errors
                 return status
-            break
 
         # Validate the glossary
         self.glossaryLoaded = True
@@ -3096,6 +3877,24 @@ class DMN():
         if len(self.errors) > 0:
             status['errors'] = self.errors
         return status
+
+
+    def XMLgetContextItems(self, concept, components, ns):
+        contextItems = {}
+        for component in components:
+            thisAttribute = component.get('name')
+            thisAttribute = re.sub(self.badFEELchars, '', (thisAttribute).replace(' ', '_'))
+            theseComponents = component.findall('itemComponent', namespaces=ns)
+            if len(theseComponents) > 0:
+                if concept is None:
+                    newConcept = thisAttribute
+                else:
+                    newConcept = concept + '.' + thisAttribute
+                contextItems = contextItems | self.XMLgetContextItems(newConcept, theseComponents, ns)
+                continue
+            thisTypeRef = component.find('typeRef', namespaces=ns)
+            contextItems[thisAttribute] = thisTypeRef
+        return contextItems
 
 
     def initGlossary(self):
@@ -3244,6 +4043,7 @@ class DMN():
         inputColor = 'background-color:LightSteelBlue'
         outputColor = 'background-color:LightPink'
         for table in self.decisionTables:
+            thisHitPolicy = self.decisionTables[table]['hitPolicy']
             sheets[table] = '<div xmlns="http://www.w3.org/1999/xhtml"><div style="width:25%;background-color:black;color:white">{}</div><table>'.format(table)
             if ('inputColumns' in self.decisionTables[table]) and ('inputRows' not in self.decisionTables[table]):
                 # Rules as Rows
@@ -3264,15 +4064,16 @@ class DMN():
                     sheets[table] += '<tr><th style="{};{};{}">{}</th>'.format(singleLeft, doubleBottom, singleTop, self.decisionTables[table]['hitPolicy'])
                 for i in range(len(self.decisionTables[table]['inputColumns'])):
                     variable = self.decisionTables[table]['inputColumns'][i]['name']
-                    variable = self.glossary[variable]['item']
                     if haveValidity:
                         sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(inputColor, singleLeft, singleBottom, singleTop, variable)
                     else:
                         sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(inputColor, singleLeft, doubleBottom, singleTop, variable)
+                haveDefaults = False
                 for i in range(len(self.decisionTables[table]['outputColumns'])):
                     variable = self.decisionTables[table]['outputColumns'][i]['name']
-                    if variable != 'Execute':
-                        variable = self.glossary[variable]['item']
+                    if 'default' in self.decisionTables[table]['outputColumns'][i]:
+                        if thisHitPolicy in ['U', 'A', 'F', 'C+', 'C<', 'C>', 'C#']:      # Unique, Any, First or Priority
+                            haveDefaults = True
                     if haveValidity:
                         if i == 0:
                             if not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
@@ -3391,6 +4192,37 @@ class DMN():
                             else:
                                 sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, self.rules[table][thisRule]['annotation'][i])
                     sheets[table] += '</tr>'
+                if haveDefaults:
+                    sheets[table] += '<tr><td style="{};{}">{}</td>'.format(singleLeft, singleBottom, 'defaultValues')
+                    for i in range(len(self.decisionTables[table]['inputColumns'])):
+                        thisTest = '-'
+                        sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, thisTest)
+                    for i in range(len(self.rules[table][thisRule]['outputs'])):      # Output in this decision rule
+                        if 'default' in self.decisionTables[table]['outputColumns'][i]:
+                            result = self.decisionTables[table]['outputColumns'][i]['default']
+                        else:
+                            result = self.decisionTables[table]['outputColumns'][i]['name']
+                        if i == 0:
+                            if not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
+                            else:
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, result)
+                        elif not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
+                            sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, result)
+                        else:
+                            sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, result)
+                    if haveAnnotation:
+                        for i in range(len(self.decisionTables[table]['annotation'])):
+                            if i == 0:
+                                if i == (len(self.decisionTables[table]['annotation']) - 1):
+                                    sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleRight, '')
+                                else:
+                                    sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, singleBottom, '')
+                            elif i == (len(self.decisionTables[table]['annotation']) - 1):
+                                sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleRight, '')
+                            else:
+                                sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, '')
+                    sheets[table] += '</tr>'
             elif ('inputColumns' not in self.decisionTables[table]) and ('inputRows' in self.decisionTables[table]):
                 # Rules as Columns
                 haveValidity = False
@@ -3404,6 +4236,11 @@ class DMN():
                 haveAnnotation = False
                 if 'annotation' in self.decisionTables[table]:
                     haveAnnotation = True
+                haveDefaults = False
+                for i in range(len(self.decisionTables[table]['outputRows'])):
+                    if 'default' in self.decisionTables[table]['outputRows'][i]:
+                        if thisHitPolicy in ['U', 'A', 'F', 'C+', 'C<', 'C>', 'C#']:      # Unique, Any, First or Priority
+                            haveDefaults = True
                 for i in range(len(self.decisionTables[table]['inputRows'])):
                     variable = self.decisionTables[table]['inputRows'][i]['name']
                     variable = self.glossary[variable]['item']
@@ -3440,16 +4277,16 @@ class DMN():
                         else:
                             thisTest = '-'
                         if thisRule == 0:           # First column
-                            if thisRule == (len(self.rules[table]) - 1):          # And Last column
+                            if (thisRule == (len(self.rules[table]) - 1)) and not haveDefaults:          # And Last column
                                 if i == 0:              # first row
                                     if i == (len(self.decisionTables[table]['inputRows']) - 1):         # And last row - first and last column and row
                                         sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleTop, singleRight, thisTest)
                                     else:                   # First and Last column on the first of many rows
                                         sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleTop, singleRight, thisTest)
                                 elif i == (len(self.decisionTables[table]['inputRows']) - 1):           # First and Last column on last row
-                                        sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleRight, thisTest)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleRight, thisTest)
                                 else:                       # First and Last column on 'middle' row
-                                        sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, thisTest)
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, thisTest)
                             else:                   # First column of many
                                 if i == 0:                 # First row
                                     if i == (len(self.decisionTables[table]['inputRows']) - 1):         # First column of many on first and last row
@@ -3457,19 +4294,19 @@ class DMN():
                                     else:                       # First column of many, first row of many
                                         sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleTop, thisTest)
                                 elif i == (len(self.decisionTables[table]['inputRows']) - 1):  # First column of many on last row
-                                        sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, thisTest)
+                                    sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, thisTest)
                                 else:                               # First column of many on 'middle' row
-                                        sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, thisTest)
-                        elif thisRule == (len(self.rules[table]) - 1):          # Last column after other columns
+                                    sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, thisTest)
+                        elif (thisRule == (len(self.rules[table]) - 1)) and not haveDefaults:          # Last column after other columns
                             if i == 0:                  # first row
                                 if i == (len(self.decisionTables[table]['inputRows']) - 1):             # Last column of first and last row
                                     sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleTop, singleRight, thisTest)
                                 else:                   # Last column of first row of many rows
                                     sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleTop, singleRight, thisTest)
                             elif i == (len(self.decisionTables[table]['inputRows']) - 1):   # Last column on last row, after many columns
-                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleRight, thisTest)
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleRight, thisTest)
                             else:               # Last column on 'middle' row
-                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, thisTest)
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, thisTest)
                         else:                       # 'middle' column
                             if i == 0:      # first row
                                 if i == (len(self.decisionTables[table]['inputRows']) - 1):         # 'middle' column, first and last row
@@ -3477,9 +4314,32 @@ class DMN():
                                 else:       # 'middle' column, first row of many
                                     sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleTop, thisTest)
                             elif i == (len(self.decisionTables[table]['inputRows']) - 1):       # 'middle' column, last row
-                                    sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, thisTest)
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, thisTest)
                             else:       # 'middle' column, 'middle' row
-                                    sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, thisTest)
+                                sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, thisTest)
+                    if haveDefaults:         # Last column
+                        thisTest = '-'
+                        if len(self.rules[table]) == 0:      # No rules, this is also the first column
+                            if i == 0:              # first row
+                                if i == (len(self.decisionTables[table]['inputRows']) - 1):         # And last row - first and last column and row
+                                    sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleTop, singleRight, thisTest)
+                                else:                   # First and Last column on the first of many rows
+                                    sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleTop, singleRight, thisTest)
+                            elif i == (len(self.decisionTables[table]['inputRows']) - 1):           # First and Last column on last row
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleRight, thisTest)
+                            else:                       # First and Last column on 'middle' row
+                                    sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, thisTest)
+                        else:
+                            if i == 0:                  # first row
+                                if i == (len(self.decisionTables[table]['inputRows']) - 1):             # Last column of first and last row
+                                    sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleTop, singleRight, thisTest)
+                                else:                   # Last column of first row of many rows
+                                    sheets[table] += '<td style="{};{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleTop, singleRight, thisTest)
+                            elif i == (len(self.decisionTables[table]['inputRows']) - 1):   # Last column on last row, after many columns
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleRight, thisTest)
+                            else:               # Last column on 'middle' row
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, thisTest)
+
                     sheets[table] += '</tr>'
                 for i in range(len(self.decisionTables[table]['outputRows'])):
                     sheets[table] += '<tr>'
@@ -3504,7 +4364,7 @@ class DMN():
                     for thisRule in range(len(self.rules[table])):      # Every rule (row) in this Decision Table
                         (name, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][thisRule]['outputs'][i]
                         if thisRule == 0:           # First column
-                            if thisRule == (len(self.rules[table]) - 1):      # And last column
+                            if (thisRule == (len(self.rules[table]) - 1)) and not haveDefaults:      # And last column
                                 if i == (len(self.decisionTables[table]['outputRows']) - 1):        # Last row
                                     sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleRight, result)
                                 else:       # First and last column of 'middle' row
@@ -3513,7 +4373,7 @@ class DMN():
                                 sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, result)
                             else:           # First column of 'middle' row
                                 sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, result)
-                        elif thisRule == (len(self.rules[table]) - 1):      # Last column
+                        elif (thisRule == (len(self.rules[table]) - 1)) and not haveDefaults:      # Last column
                             if i == (len(self.decisionTables[table]['outputRows']) - 1):        # Last column on last row
                                 sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleRight, result)
                             else:       # Last column on 'middle' row
@@ -3523,6 +4383,21 @@ class DMN():
                                 sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, result)
                             else:       # 'middle' column on 'middle' row
                                 sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, result)
+                    if haveDefaults:                # Last column
+                        if 'default' in self.decisionTables[table]['outputRows'][i]:
+                            result = self.decisionTables[table]['outputRows'][i]['default']
+                        else:
+                            result = self.decisionTables[table]['outputRows'][i]['name']
+                        if len(self.rules[table]) == 0:             # and first column
+                            if i == (len(self.decisionTables[table]['outputRows']) - 1):        # Last row
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleRight, result)
+                            else:       # First and last column of 'middle' row
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
+                        else:
+                            if i == (len(self.decisionTables[table]['outputRows']) - 1):        # Last column on last row
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, doubleBottom, singleRight, result)
+                            else:       # Last column on 'middle' row
+                                sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, singleRight, result)
                     sheets[table] += '</tr>'
                 if haveAnnotation:
                     for i in range(len(self.decisionTables[table]['annotation'])):
@@ -3545,14 +4420,19 @@ class DMN():
                     sheets[table] += '<td style="{};{}"></td>'.format(singleLeft, singleBottom)
                 for thisRule in range(len(self.rules[table])):      # Every rule (row) in this Decision Table
                     if thisRule == 0:
-                        if thisRule == (len(self.rules[table]) - 1):
+                        if (thisRule == (len(self.rules[table]) - 1)) and not haveDefaults:
                             sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleRight, self.rules[table][thisRule]['ruleId'])
                         else:
                             sheets[table] += '<td style="{};{}">{}</td>'.format(doubleLeft, singleBottom, self.rules[table][thisRule]['ruleId'])
-                    elif thisRule == (len(self.rules[table]) - 1):
+                    elif (thisRule == (len(self.rules[table]) - 1)) and not haveDefaults:
                         sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleRight, self.rules[table][thisRule]['ruleId'])
                     else:
                         sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, self.rules[table][thisRule]['ruleId'])
+                if haveDefaults:                    # Last column
+                    if len(self.rules[table]) == 0:             # And first column
+                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(doubleLeft, singleBottom, singleRight, 'defaultValues')
+                    else:
+                        sheets[table] += '<td style="{};{};{}">{}</td>'.format(singleLeft, singleBottom, singleRight, 'defaultValues')
                 sheets[table] += '</tr>'
             else:
                 # Crosstab Rules
@@ -3675,7 +4555,7 @@ class DMN():
         # which 'must be' valid FEEL when the values are replace and the wrapping "" is removed
         replaced = []
         if len(text) == 0:
-            return text
+            return (replaced, text)
         at = 0
         to = len(text)
         newText = ''
@@ -3686,7 +4566,7 @@ class DMN():
                 stringEnd = re.search(r'[^\\]"', text[at:])
                 if stringEnd is None:     # Hum, unbounded string
                     newText += text[at:]
-                    return newText
+                    return (replaced, newText)
                 newText += text[at:at + stringEnd.end()]
                 at += stringEnd.end()
                 continue
@@ -3698,7 +4578,8 @@ class DMN():
             else:
                 searchTo += at
             for item in self.glossaryItems:
-                match = re.search(r'\b' + item + r'\b', text[at:searchTo])
+                thisItem = re.sub(r'\.', r'\\\.', item)
+                match = re.search(r'\b' + thisItem + r'\b', text[at:searchTo])
                 if match is not None:
                     if ((foundAt == -1) or (match.start() < foundAt)):                  # First found or nearer find
                         foundAt = match.start()
@@ -3777,7 +4658,7 @@ class DMN():
 
             dfDecision is a Pandas DataFrame containing details about the 'decision' (last rule executed in the last decision table tested)
 
-                - column 'DecisionName' is the name of the decision from the 'Decisions/Executed Decision Tables' table on the Decisions worksheet
+                - column 'DecisionName' is the name of the decision from the 'Decisions/Executed Decision Tables' table
                 - column 'TableName' is the name of the last executed decision table
                 - column 'RuleID' is the rule id of the last rule execute in the last decision table - the rule id of the decision
                 - column 'DecisionAnnotations' is any annotation for the 'DecisionName'
@@ -3935,7 +4816,9 @@ class DMN():
         Args:
             param1 (dict): The dictionary of data about which a decision is being made.
 
-                - Each key in 'data' must match a 'Variable' in the Glossary
+                - Each key in 'data' must match a 'Variable' in the Glossary or a 'Business Concept'
+                  [If key is a 'Business Concept' then the value must be dictionay (or a list of dictionaries) where, for each key in the dictionary
+                   the construct of 'Business Concept'.key must match a 'Variable' in the Glossary]
                 - the matching 'Variable' in the Glossary will be set to the matching value for this key from the 'data' dictionary.
                 - Any entry in the Glossary which does not have a key in the 'data' dictionary will be set to the value 'None'.
                 - The values associated with each 'Variable' in the Glossary
@@ -4000,14 +4883,44 @@ class DMN():
         self.initGlossary()
         validData = True
         for variable in data:
-            if variable not in self.glossary:
+            value = data[variable]
+            if variable in self.glossary:
+                item = self.glossary[variable]['item']
+            elif variable in self.glossaryConcepts:
+                if isinstance(value, dict):
+                    for item in value:
+                        thisItem = variable + '.' + item
+                        thisItem = re.sub(self.badFEELchars, '', thisItem.replace(' ', '_'))
+                        if thisItem not in self.glossaryConcepts[variable]:
+                            self.errors.append('Attribute ({!s}) not in Glossary Business Concept ({!s})'.format(item, variable))
+                            status = {}
+                            status['errors'] = self.errors
+                            self.errors = []
+                            return (status, {})
+                elif isinstance(value, list):
+                    for i in range(len(value)):
+                        if not isinstance(value[i], dict):
+                            self.errors.append('Missing attributes for Glossary Business Concept ({!s})'.format(variable))
+                            status = {}
+                            status['errors'] = self.errors
+                            self.errors = []
+                            return (status, {})
+                        for item in value[i]:
+                            thisItem = variable + '.' + item
+                            thisItem = re.sub(self.badFEELchars, '', thisItem.replace(' ', '_'))
+                            if thisItem not in self.glossaryConcepts[variable]:
+                                self.errors.append('Attribute ({!s}) not in Glossary Business Concept ({!s})'.format(item, variable))
+                                status = {}
+                                status['errors'] = self.errors
+                                self.errors = []
+                                return (status, {})
+                item = variable
+            else:
                 self.errors.append('variable ({!s}) not in Glossary'.format(variable))
                 status = {}
                 status['errors'] = self.errors
                 self.errors = []
                 return (status, {})
-            item = self.glossary[variable]['item']
-            value = data[variable]
             # Convert the passed Python data to it's FEEL equivalent and store, as a value, in pySFeel
             sFeelValue = self.value2sfeel(value)
             if sFeelValue is None:
@@ -4049,7 +4962,7 @@ class DMN():
                         doDecision = False
                         break
             if doDecision:      # Run this Decision Table
-                newData = self.decideTable(table, decisionAnnotations, data)
+                newData = self.decideTable(table, decisionAnnotations, data, None)
                 if newData is None:
                     break
                 if isinstance(newData, list):
@@ -4066,9 +4979,9 @@ class DMN():
             return (status, self.allResults)
 
 
-    def decideTable(self, table, decisionAnnotations, data):
+    def decideTable(self, table, decisionAnnotations, data, parentPolicy):
         # Use Decision Table 'table' to make a decision
-        # print('decideTable', table, decisionAnnotations, data)
+        # print('decideTable', table, decisionAnnotations, data, parentPolicy)
 
         # Check for circular references, or decision that have already been made
         if self.decisionTables[table]['status'] == 'being processed':
@@ -4077,6 +4990,36 @@ class DMN():
                 self.errors.append("Recursion Count exceeded for Decision Table '{!s}'".format(table))
                 return None
         self.decisionTables[table]['status'] = 'being processed'
+        if parentPolicy is None:
+            thisHitPolicy = self.decisionTables[table]['hitPolicy']
+        else:
+            thisHitPolicy = parentPolicy
+
+        haveDefaults = True
+        defaultValues = []
+        if 'outputColumns' in self.decisionTables[table]:
+            for i in range(len(self.decisionTables[table]['outputColumns'])):
+                if 'default' not in self.decisionTables[table]['outputColumns'][i]:
+                        haveDefaults = False
+                        break
+                variable = self.decisionTables[table]['outputColumns'][i]['name']
+                result = self.decisionTables[table]['outputColumns'][i]['default']
+                defaultValues.append((variable, result))
+        if 'outputRows' in self.decisionTables[table]:
+            for i in range(len(self.decisionTables[table]['outputRows'])):
+                if 'default' not in self.decisionTables[table]['outputRows'][i]:
+                    haveDefaults = False
+                    break
+                variable = self.decisionTables[table]['outputRows'][i]['name']
+                result = self.decisionTables[table]['outputRows'][i]['default']
+                defaultValues.append((variable, result))
+        if 'output' in self.decisionTables[table]:
+            if 'default' not in self.decisionTables[table]['output']:
+                haveDefaults = False
+            else:
+                variable = self.decisionTables[table]['output'][i]['name']
+                result = self.decisionTables[table]['output'][i]['default']
+                defaultValues.append((variable, result))
 
         ranks = {}
         foundRule = None
@@ -4105,9 +5048,16 @@ class DMN():
                         else:
                             (failed, value) = self.sfeel(item)         # Get the value from the Glossary
                             if not validityIsFixed and failed:
-                                self.errors.append("Bad S-FEEL for item '{!s}' in table '{!s}' for rule '{!s}' at '{!s}' on sheet '{!s}'".format(item, table, thisRule, coordinate, sheet))
-                        message = "Variable {!s} has S-FEEL input value '{!s}' which does not match input validity list '{!s}' for decision table '{!s}' at '{!s}' on sheet '{!s}'"
-                        self.errors.append(message.format(item, repr(value), testValidity, table, coordinate, sheet))
+                                if sheet is None:
+                                    self.errors.append("Bad S-FEEL for item '{!s}' in table '{!s}' for rule '{!s}'".format(item, table, thisRule))
+                                else:
+                                    self.errors.append("Bad S-FEEL for item '{!s}' in table '{!s}' for rule '{!s}' at '{!s}' on sheet '{!s}'".format(item, table, thisRule, coordinate, sheet))
+                        if sheet is None:
+                            message = "Variable {!s} has S-FEEL input value '{!s}' which does not match input validity list '{!s}' for decision table '{!s}'"
+                            self.errors.append(message.format(item, repr(value), testValidity, table))
+                        else:
+                            message = "Variable {!s} has S-FEEL input value '{!s}' which does not match input validity list '{!s}' for decision table '{!s}' at '{!s}' on sheet '{!s}'"
+                            self.errors.append(message.format(item, repr(value), testValidity, table, coordinate, sheet))
                         self.decisionTables[table]['status'] = 'done'
                         self.decisionTables[table]['recursionCount'] = 0
                         return None
@@ -4132,27 +5082,38 @@ class DMN():
                     break
             else:
                 # We found a hit it may be one of many
-                if self.decisionTables[table]['hitPolicy'] in ['U', 'A', 'F']:      # Unique, Any or First - excute only one rule
+                if thisHitPolicy in ['U', 'A', 'F']:      # Unique, Any or First - excute only one rule
                     ranks[thisRule] = [thisRule]
                     break
-                elif self.decisionTables[table]['hitPolicy'][0] in ['R', 'C']:      # Rule Order or Collection - execute on or more rules
+                elif thisHitPolicy[0] in ['R', 'C']:      # Rule Order or Collection - execute one or more rules
                     ranks[thisRule] = [thisRule]
-                elif self.decisionTables[table]['hitPolicy'] in ['P', 'O']:         # Priority (top priority) or Output Order - execute one or more rules (decreasing priorty)
+                elif thisHitPolicy in ['P', 'O']:         # Priority (top priority) or Output Order - execute one or more rules (decreasing priorty)
                     # Rank each of the multiple outputs for this rule. Assign the highest ranking as the ranking score for this rule.
-                    thisRank = -1
+                    thisRank = None
                     for i in range(len(self.rules[table][thisRule]['outputs'])):
                         (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][thisRule]['outputs'][i]
                         if (variable != 'Execute') and (rank is None):
-                            item = self.glossary[variable]['item']
                             if isFixed:
                                 result = fixedValue
                             else:
-                                (failed, result) = self.sfeel('{}'.format(item))
+                                (replaced, result) = self.replaceItems(result)      # Replace BusinessConcept.Attribute references with actual values
+                                sfeelText = self.data2sfeel(None, None, result, True)           # See if this is valid S-FEEL
+                                if sfeelText is None:               # Not valid FEEL - make this a FEEL string
+                                    result = '"' + result + '"'
+                                else:                               # Valid FEEL tokens - check if it is a value FEEL expression
+                                    (status, tmpResult) = self.parser.sFeelParse(result)
+                                    if 'errors' in status:          # No - so make it a string
+                                        result = '"' + result + '"'
+                                (failed, result) = self.sfeel('{}'.format(result))
                                 if failed:
-                                    self.errors.append("Bad S-FEEL fetching value for ranking for item '{}' in table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(item, table, coordinate, sheet, thisRule))
+                                    if sheet is None:
+                                        self.errors.append("Bad S-FEEL getting value for ranking for item '{}' in table '{!s}' for rule '{!s}'".format(item, table, thisRule))
+                                    else:
+                                        self.errors.append("Bad S-FEEL getting value for ranking for item '{}' in table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(item, table, coordinate, sheet, thisRule))
                                     self.decisionTables[table]['status'] = 'done'
                                     self.decisionTables[table]['recursionCount'] = 0
                                     return None
+                            rank = None
                             if result in self.decisionTables[table]['outputValidity'][outputIndex]:
                                 rank = self.decisionTables[table]['outputValidity'][outputIndex].index(result)
                             else:
@@ -4160,13 +5121,18 @@ class DMN():
                                     if float(result) in self.decisionTables[table]['outputValidity'][outputIndex]:
                                         rank = self.decisionTables[table]['outputValidity'][outputIndex].index(float(result))
                                 except:
-                                    rank = -1
-                            if rank > thisRank:
+                                    pass
+                        if rank is not None:
+                            if thisRank is None:
                                 thisRank = rank
+                            elif rank < thisRank:
+                                thisRank = rank
+                    if thisRank is None:            # The rule is a winner, and all outputs are valid, but none match a validity rule
+                        thisRank = -1               # Therefore, there's no validity on this decision table
                     if thisRank not in ranks:
                         ranks[thisRank] = []
                     ranks[thisRank].append(thisRule)
-        if len(ranks.keys()) == 0:
+        if not haveDefaults and (len(ranks.keys()) == 0):
             self.errors.append("No rules matched the input data for decision table '{!s}'".format(table))
             self.decisionTables[table]['status'] = 'done'
             self.decisionTables[table]['recursionCount'] = 0
@@ -4186,10 +5152,61 @@ class DMN():
                 if (len(thisResult) > 0) and (thisResult[0] == '"') and (thisResult[-1] == '"'):
                     thisResult = thisResult[1:-1]
             newData['Result'][variable] = thisResult
-        if self.decisionTables[table]['hitPolicy'] in ['U', 'A', 'F', 'P']:      # Unique, Any, First or Priority
+        if len(ranks.keys()) == 0:      # Have defaults
+            for (variable, result) in defaultValues:
+                sfeelText = self.data2sfeel(None, None, result, True)           # See if this is valid S-FEEL
+                if sfeelText is None:               # Not valid FEEL - make this a FEEL string
+                    result = '"' + result + '"'
+                else:                               # Valid FEEL tokens - check if it is a value FEEL expression
+                    (status, tmpResult) = self.parser.sFeelParse(result)
+                    if 'errors' in status:          # No - so make it a string
+                        result = '"' + result + '"'
+                # Evalutate the result and store the value
+                item = self.glossary[variable]['item']
+                (failed, retVal) = self.sfeel('{} <- {}'.format(item, result))
+                if failed:
+                    self.errors.append("Bad S-FEEL assigning value to variable '{} <- {}' for assembling 'Result' for table '{!s}'".format(item, result, table))
+                    self.decisionTables[table]['status'] = 'done'
+                    self.decisionTables[table]['recursionCount'] = 0
+                    return None
+                (failed, thisResult) = self.sfeel('{}'.format(item))
+                if failed:
+                    self.errors.append("Bad S-FEEL fetching value'{}' for 'Result' for table '{!s}'".format(item, table))
+                    self.decisionTables[table]['status'] = 'done'
+                    self.decisionTables[table]['recursionCount'] = 0
+                    return None
+                if isinstance(thisResult, str):
+                    if (len(thisResult) > 0) and (thisResult[0] == '"') and (thisResult[-1] == '"'):
+                        thisResult = thisResult[1:-1]
+                # print('Setting default returned value for', variable, 'to', thisResult, 'in Decision Table', "'{!s}'".format(table))
+                if thisHitPolicy in ['U', 'A', 'F', 'P']:      # Unique, Any, First or Priority
+                    newData['Result'][variable] = thisResult
+                elif thisHitPolicy in ['O', 'R', 'C']:      # One or more matches in rules order or priority or oollect
+                    newData['Result'][variable] = [thisResult]
+                else:
+                    newData['Result'][variable] = thisResult
+            ruleId = (self.decisionTables[table]['name'], table, 'default values')
+            if 'annotation' in self.decisionTables[table]:
+                for annotation in range(len(self.decisionTables[table]['annotation'])):
+                    name = self.decisionTables[table]['annotation'][annotation]
+                    text = self.rules[table][foundRule]['annotation'][annotation]
+                    annotations.append((name, text))
+            newData['Executed Rule'] = ruleId
+            if len(decisionAnnotations) > 0:
+                newData['DecisionAnnotations'] = decisionAnnotations
+            else:
+                newData['DecisionAnnotations'] = []
+            if len(annotations) > 0:
+                newData['RuleAnnotations'] = annotations
+            else:
+                newData['RuleAnnotations'] = []
+        elif thisHitPolicy in ['U', 'A', 'F', 'P']:      # Unique, Any, First or Priority
             # Execute this one rule - the foundRule
-            highestRank = list(reversed(ranks.keys()))[0]
-            foundRule = ranks[highestRank][-1]
+            newData['Executed Rule'] = []
+            newData['DecisionAnnotations'] = []
+            newData['RuleAnnotations']= []
+            highestRank = sorted(ranks.keys())[0]
+            foundRule = ranks[highestRank][0]
             for i in range(len(self.rules[table][foundRule]['outputs'])):
                 (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][foundRule]['outputs'][i]
                 # result is a string of valid FEEL tokens, but may be a valid expression
@@ -4209,7 +5226,10 @@ class DMN():
                         else:
                             childTable = result
                         if childTable not in self.decisionTables:
-                            self.errors.append("Invalid child table '{!s}' in 'Execute' column in Decision Table '{!s}' at '{!s}' on sheet '{!s}'".format(childTable, table, coordinate, sheet))
+                            if sheet is None:
+                                self.errors.append("Invalid child table '{!s}' in 'Execute' column in Decision Table '{!s}'".format(childTable, table))
+                            else:
+                                self.errors.append("Invalid child table '{!s}' in 'Execute' column in Decision Table '{!s}' at '{!s}' on sheet '{!s}'".format(childTable, table, coordinate, sheet))
                             self.decisionTables[table]['status'] = 'done'
                             self.decisionTables[table]['recursionCount'] = 0
                             return None
@@ -4219,7 +5239,7 @@ class DMN():
                                 name = self.decisionTables[table]['annotation'][annotation]
                                 text = self.rules[table][foundRule]['annotation'][annotation]
                                 childDecisionAnnotations.append((name, text))
-                        childData = self.decideTable(childTable, childDecisionAnnotations, data)
+                        childData = self.decideTable(childTable, childDecisionAnnotations, data, thisHitPolicy)
                         if childData is not None:
                             self.allResults.append(childData)
                         else:
@@ -4237,6 +5257,21 @@ class DMN():
                                 if (len(thisResult) > 0) and (thisResult[0] == '"') and (thisResult[-1] == '"'):
                                     thisResult = thisResult[1:-1]
                             newData['Result'][variable] = thisResult
+                            ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
+                            if 'annotation' in self.decisionTables[table]:
+                                for annotation in range(len(self.decisionTables[table]['annotation'])):
+                                    name = self.decisionTables[table]['annotation'][annotation]
+                                    text = self.rules[table][foundRule]['annotation'][annotation]
+                                    annotations.append((name, text))
+                            newData['Executed Rule'].append(ruleId)
+                            if len(decisionAnnotations) > 0:
+                                newData['DecisionAnnotations'].append(decisionAnnotations)
+                            else:
+                                newData['DecisionAnnotations'].append([])
+                            if len(annotations) > 0:
+                                newData['RuleAnnotations'].append(annotations)
+                            else:
+                                newData['RuleAnnotations'].append([])
                     continue
                 # Evalutate the result and store the value
                 item = self.glossary[variable]['item']
@@ -4283,167 +5318,20 @@ class DMN():
                 newData['RuleAnnotations'] = annotations
             else:
                 newData['RuleAnnotations'] = []
-        elif self.decisionTables[table]['hitPolicy'][0] == 'C':      # COLLECT
+        elif thisHitPolicy[0] in ['O', 'R', 'C']:      # One or more matches in rules order or priority or oollect
             # Execute this set of rules (which aren't ranked)
             newData['Executed Rule'] = []
             newData['DecisionAnnotations'] = []
             newData['RuleAnnotations']= []
             annotations = []
             first = True
-            for nextRule in ranks.values():
-                foundRule = nextRule[0]
-                for i in range(len(self.rules[table][foundRule]['outputs'])):
-                    (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][foundRule]['outputs'][i]
-                    # result is a string of valid FEEL tokens, but may be a valid expression
-                    if not isFixed:
-                        (replaced, result) = self.replaceItems(result)      # Replace BusinessConcept.Attribute references with actual values
-                        sfeelText = self.data2sfeel(None, None, result, True)           # See if this is valid S-FEEL
-                        if sfeelText is None:               # Not valid FEEL - make this a FEEL string
-                            result = '"' + result + '"'
-                        else:                               # Valid FEEL tokens - check if it is a value FEEL expression
-                            (status, tmpResult) = self.parser.sFeelParse(result)
-                            if 'errors' in status:          # No - so make it a string
-                                result = '"' + result + '"'
-                    if variable == 'Execute':
-                        if result is not None:
-                            if (len(result) > 1) and (result[0] == '"') and (result[-1] == '"'):
-                                childTable = result[1:-1]
-                            else:
-                                childTable = result
-                            if childTable not in self.decisionTables:
-                                self.errors.append("Invalid child table '{!s}' in 'Execute' column in Decision Table '{!s}' at '{!s}' on sheet '{!s}'".format(childTable, table, coordinate, sheet))
-                                self.decisionTables[table]['status'] = 'done'
-                                self.decisionTables[table]['recursionCount'] = 0
-                                return None
-                            childDecisionAnnotations = []
-                            if 'annotation' in self.decisionTables[table]:
-                                for annotation in range(len(self.decisionTables[table]['annotation'])):
-                                    name = self.decisionTables[table]['annotation'][annotation]
-                                    text = self.rules[table][foundRule]['annotation'][annotation]
-                                    childDecisionAnnotations.append((name, text))
-                            childData = self.decideTable(childTable, childDecisionAnnotations, data)
-                            if childData is not None:
-                                self.allResults.append(childData)
-                            else:
-                                return None
-                            # Reset the Result outputs to reflect the child decision
-                            for variable in self.glossary:
-                                item = self.glossary[variable]['item']
-                                (failed, thisResult) = self.sfeel('{}'.format(item))
-                                if failed:
-                                    self.errors.append("Bad S-FEEL when fetching value for item '{}' when re-assembling 'Result' for table '{!s}'".format(item, table))
-                                    self.decisionTables[table]['status'] = 'done'
-                                    self.decisionTables[table]['recursionCount'] = 0
-                                    return None
-                                if isinstance(thisResult, str):
-                                    if (len(thisResult) > 0) and (thisResult[0] == '"') and (thisResult[-1] == '"'):
-                                        thisResult = thisResult[1:-1]
-                                newData['Result'][variable] = thisResult
-                        continue
-                    if first:
-                        if len(self.decisionTables[table]['hitPolicy']) == 1:
-                            newData['Result'][variable] = []
-                        elif self.decisionTables[table]['hitPolicy'][1] in ['+', '#']:
-                            newData['Result'][variable] = 0
-                        else:
-                            newData['Result'][variable] = None
-                    item = self.glossary[variable]['item']
-                    if len(self.decisionTables[table]['hitPolicy']) == 1:
-                        (failed, oldValue) = self.sfeel('{}'.format(item))
-                        if failed:
-                            self.errors.append("Bad S-FEEL fetching value'{}' in Decision Table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(item, table, coordinate, sheet, foundRule))
-                            self.decisionTables[table]['status'] = 'done'
-                            self.decisionTables[table]['recursionCount'] = 0
-                            return None
-                        if isFixed:
-                            thisOutput = fixedValue
-                        else:
-                            (failed, thisOutput) = self.sfeel('{}'.format(result))
-                            if failed:
-                                self.errors.append("Bad S-FEEL value'{}' in Decision Table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(result, table, coordinate, sheet, foundRule))
-                                self.decisionTables[table]['status'] = 'done'
-                                self.decisionTables[table]['recursionCount'] = 0
-                                return None
-                        if isinstance(oldValue, list):
-                            if isinstance(thisOutput, list):
-                                newList = oldValue + thisOutput
-                            else:
-                                newList = oldValue + [thisOutput]
-                        elif isinstance(thisOutput, list):
-                            newList = thisOutput
-                        else:
-                            newList = [thisOutput]
-                        sfeelText = self.list2sfeel(newList)           # See if this is valid S-FEEL
-                        (failed, retVal) = self.sfeel('{} <- {}'.format(item, sfeelText))
-                        isFixed = False
-                    else:
-                         (failed, retVal) = self.sfeel('{} <- {}'.format(item, result))
-                    if failed:
-                        self.errors.append("Bad S-FEEL assigning value to variable '{} <- {}' in Decision Table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(item, result, table, coordinate, sheet, foundRule))
-                        self.decisionTables[table]['status'] = 'done'
-                        self.decisionTables[table]['recursionCount'] = 0
-                        return None
-                    if isFixed:
-                        thisOutput = fixedValue
-                    else:
-                        (failed, thisOutput) = self.sfeel('{}'.format(item))
-                        if failed:
-                            self.errors.append("Bad S-FEEL fetching value'{}' in Decision Table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(item, table, coordinate, sheet, foundRule))
-                            self.decisionTables[table]['status'] = 'done'
-                            self.decisionTables[table]['recursionCount'] = 0
-                            return None
-                    if isinstance(thisOutput, str):
-                        if (len(thisOutput) > 1) and (thisOutput[0] == '"') and (thisOutput[-1] == '"'):
-                            thisOutput = thisOutput[1:-1]
-                    if len(self.decisionTables[table]['hitPolicy']) == 1:
-                        newData['Result'][variable] = thisOutput
-                    elif self.decisionTables[table]['hitPolicy'][1] == '+':
-                        newData['Result'][variable] += thisOutput
-                    elif self.decisionTables[table]['hitPolicy'][1] == '<':
-                        if newData['Result'][variable] is None:
-                            newData['Result'][variable] = thisOutput
-                        elif thisOutput < newData['Result'][variable]:
-                            newData['Result'][variable] = thisOutput
-                    elif self.decisionTables[table]['hitPolicy'][1] == '>':
-                        if newData['Result'][variable] is None:
-                            newData['Result'][variable] = thisOutput
-                        elif thisOutput > newData['Result'][variable]:
-                            newData['Result'][variable] = thisOutput
-                    else:
-                        newData['Result'][variable] += 1
-                # print('Setting returned value for', variable, 'to', str(newData['Result'][variable]), 'in Decision Table', "'{!s}'".format(table))
-                first = False   # Done every output variable once
-                ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
-                if 'annotation' in self.decisionTables[table]:
-                    for annotation in range(len(self.decisionTables[table]['annotation'])):
-                        name = self.decisionTables[table]['annotation'][annotation]
-                        text = self.rules[table][foundRule]['annotation'][annotation]
-                        annotations.append((name, text))
-                newData['Executed Rule'].append(ruleId)
-                if len(decisionAnnotations) > 0:
-                    newData['DecisionAnnotations'].append(decisionAnnotations)
-                else:
-                    newData['DecisionAnnotations'].append([])
-                if len(annotations) > 0:
-                    newData['RuleAnnotations'].append(annotations)
-                else:
-                    newData['RuleAnnotations'].append([])
-        elif self.decisionTables[table]['hitPolicy'][0] in ['O', 'R']:      # One or more matches in priority or rules order
-            # Execute these rules in ranked order
-            if self.decisionTables[table]['hitPolicy'][0] == 'O':
-                rulesOrder = list(reversed(ranks.keys()))
-            else:
-                rulesOrder = sorted(ranks.keys())
-            allData = []
+            rulesOrder = sorted(ranks.keys())
             for i in rulesOrder:
                 for j in range(len(ranks[i])):
-                    annotations.append([])
                     foundRule = ranks[i][j]
-                    newData['Executed Rule'] = []
-                    newData['DecisionAnnotations'] = []
-                    newData['RuleAnnotations']= []
                     for k in range(len(self.rules[table][foundRule]['outputs'])):
                         (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][foundRule]['outputs'][k]
+                        # result is a string of valid FEEL tokens, but may be a valid expression
                         if not isFixed:
                             (replaced, result) = self.replaceItems(result)      # Replace BusinessConcept.Attribute references with actual values
                             sfeelText = self.data2sfeel(None, None, result, True)           # See if this is valid S-FEEL
@@ -4460,7 +5348,10 @@ class DMN():
                                 else:
                                     childTable = result
                                 if childTable not in self.decisionTables:
-                                    self.errors.append("Invalid child table '{!s}' in 'Execute' column in Decision Table '{!s}' at '{!s}' on sheet '{!s}'".format(childTable, table, coordinate, sheet))
+                                    if sheet is None:
+                                        self.errors.append("Invalid child table '{!s}' in 'Execute' column in Decision Table '{!s}'".format(childTable, table))
+                                    else:
+                                        self.errors.append("Invalid child table '{!s}' in 'Execute' column in Decision Table '{!s}' at '{!s}' on sheet '{!s}'".format(childTable, table, coordinate, sheet))
                                     self.decisionTables[table]['status'] = 'done'
                                     self.decisionTables[table]['recursionCount'] = 0
                                     return None
@@ -4470,7 +5361,7 @@ class DMN():
                                         name = self.decisionTables[table]['annotation'][annotation]
                                         text = self.rules[table][foundRule]['annotation'][annotation]
                                         childDecisionAnnotations.append((name, text))
-                                childData = self.decideTable(childTable, childDecisionAnnotations, data)
+                                childData = self.decideTable(childTable, childDecisionAnnotations, data, True)
                                 if childData is not None:
                                     self.allResults.append(childData)
                                 else:
@@ -4488,47 +5379,122 @@ class DMN():
                                         if (len(thisResult) > 0) and (thisResult[0] == '"') and (thisResult[-1] == '"'):
                                             thisResult = thisResult[1:-1]
                                     newData['Result'][variable] = thisResult
-                            continue
+                                ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
+                                if 'annotation' in self.decisionTables[table]:
+                                    for annotation in range(len(self.decisionTables[table]['annotation'])):
+                                        name = self.decisionTables[table]['annotation'][annotation]
+                                        text = self.rules[table][foundRule]['annotation'][annotation]
+                                        annotations.append((name, text))
+                                newData['Executed Rule'].append(ruleId)
+                                if len(decisionAnnotations) > 0:
+                                    newData['DecisionAnnotations'].append(decisionAnnotations)
+                                else:
+                                    newData['DecisionAnnotations'].append([])
+                                if len(annotations) > 0:
+                                    newData['RuleAnnotations'].append(annotations)
+                                else:
+                                    newData['RuleAnnotations'].append([])
+                                continue
+                        if first:
+                            if len(thisHitPolicy) == 1:
+                                newData['Result'][variable] = []
+                            elif thisHitPolicy[1] in ['+', '#']:
+                                newData['Result'][variable] = 0
+                            else:
+                                newData['Result'][variable] = None
                         item = self.glossary[variable]['item']
-                        if item not in newData['Result']:
-                            newData['Result'][variable] = []
-                        (failed, retVal) = self.sfeel('{} <- {}'.format(item, result))
+                        if len(thisHitPolicy) == 1:
+                            (failed, oldValue) = self.sfeel('{}'.format(item))
+                            if failed:
+                                if sheet is None:
+                                    self.errors.append("Bad S-FEEL fetching value'{}' in Decision Table '{!s}' for rule '{!s}'".format(item, table, foundRule))
+                                else:
+                                    self.errors.append("Bad S-FEEL fetching value'{}' in Decision Table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(item, table, coordinate, sheet, foundRule))
+                                self.decisionTables[table]['status'] = 'done'
+                                self.decisionTables[table]['recursionCount'] = 0
+                                return None
+                            if isFixed:
+                                thisOutput = fixedValue
+                            else:
+                                (failed, thisOutput) = self.sfeel('{}'.format(result))
+                                if failed:
+                                    if sheet is None:
+                                        self.errors.append("Bad S-FEEL value'{}' in Decision Table '{!s}' for rule '{!s}'".format(result, table, foundRule))
+                                    else:
+                                        self.errors.append("Bad S-FEEL value'{}' in Decision Table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(result, table, coordinate, sheet, foundRule))
+                                    self.decisionTables[table]['status'] = 'done'
+                                    self.decisionTables[table]['recursionCount'] = 0
+                                    return None
+                            if isinstance(oldValue, list):
+                                if isinstance(thisOutput, list):
+                                    newList = oldValue + thisOutput
+                                else:
+                                    newList = oldValue + [thisOutput]
+                            elif isinstance(thisOutput, list):
+                                newList = thisOutput
+                            else:
+                                newList = [thisOutput]
+                            sfeelText = self.list2sfeel(newList)           # See if this is valid S-FEEL
+                            (failed, retVal) = self.sfeel('{} <- {}'.format(item, sfeelText))
+                            isFixed = False
+                        else:
+                            (failed, retVal) = self.sfeel('{} <- {}'.format(item, result))
                         if failed:
-                            self.errors.append("Bad S-FEEL assigning value to variable '{} <- {}' in Decision Table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(item, result, table, coordinate, sheet, foundRule))
+                            if sheet is None:
+                                self.errors.append("Bad S-FEEL assigning value to variable '{} <- {}' in Decision Table '{!s}' for rule '{!s}'".format(item, result, table, foundRule))
+                            else:
+                                self.errors.append("Bad S-FEEL assigning value to variable '{} <- {}' in Decision Table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(item, result, table, coordinate, sheet, foundRule))
                             self.decisionTables[table]['status'] = 'done'
                             self.decisionTables[table]['recursionCount'] = 0
                             return None
                         if isFixed:
-                            thisResult = fixedValue
+                            thisOutput = fixedValue
                         else:
-                            (failed, thisResult) = self.sfeel('{}'.format(item))
+                            (failed, thisOutput) = self.sfeel('{}'.format(item))
                             if failed:
-                                self.errors.append("Bad S-FEEL fetching value'{}' in table '{!s}' for rule '{!s}'".format(item, table, foundRule))
+                                if sheet is None:
+                                    self.errors.append("Bad S-FEEL fetching value'{}' in Decision Table '{!s}' for rule '{!s}'".format(item, table, foundRule))
+                                else:
+                                    self.errors.append("Bad S-FEEL fetching value'{}' in Decision Table '{!s}' at '{!s}' on sheet '{!s}' for rule '{!s}'".format(item, table, coordinate, sheet, foundRule))
                                 self.decisionTables[table]['status'] = 'done'
                                 self.decisionTables[table]['recursionCount'] = 0
                                 return None
-                        if isinstance(thisResult, str):
-                            if (len(thisResult) > 0) and (thisResult[0] == '"') and (thisResult[-1] == '"'):
-                                thisResult = thisResult[1:-1]
-                        newData['Result'][variable] = thisResult
-                        # print('Setting returned value for', variable, 'to', thisResult, 'in Decision Table', "'{!s}'".format(table))
-                    ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
-                    if 'annotation' in self.decisionTables[table]:
-                        for annotation in range(len(self.decisionTables[table]['annotation'])):
-                            name = self.decisionTables[table]['annotation'][annotation]
-                            text = self.rules[table][foundRule]['annotation'][annotation]
-                            annotations.append((name, text))
-                    newData['Executed Rule'].append(ruleId)
-                    if len(decisionAnnotations) > 0:
-                        newData['DecisionAnnotations'].append(decisionAnnotations)
-                    else:
-                        newData['DecisionAnnotations'].append([])
-                    if len(annotations) > 0:
-                        newData['RuleAnnotations'].append(annotations)
-                    else:
-                        newData['RuleAnnotations'].append([])
-                    allData.append(copy.deepcopy(newData))
-            newData = copy.deepcopy(allData)         
+                        if isinstance(thisOutput, str):
+                            if (len(thisOutput) > 1) and (thisOutput[0] == '"') and (thisOutput[-1] == '"'):
+                                thisOutput = thisOutput[1:-1]
+                        if len(thisHitPolicy) == 1:
+                            newData['Result'][variable] = thisOutput
+                        elif thisHitPolicy[1] == '+':
+                            newData['Result'][variable] += thisOutput
+                        elif thisHitPolicy[1] == '<':
+                            if newData['Result'][variable] is None:
+                                newData['Result'][variable] = thisOutput
+                            elif thisOutput < newData['Result'][variable]:
+                                newData['Result'][variable] = thisOutput
+                        elif thisHitPolicy[1] == '>':
+                            if newData['Result'][variable] is None:
+                                newData['Result'][variable] = thisOutput
+                            elif thisOutput > newData['Result'][variable]:
+                                newData['Result'][variable] = thisOutput
+                        else:
+                            newData['Result'][variable] += 1
+                        # print('Setting returned value for', variable, 'to', str(newData['Result'][variable]), 'in Decision Table', "'{!s}'".format(table))
+                        first = False   # Done every output variable once
+                        ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
+                        if 'annotation' in self.decisionTables[table]:
+                            for annotation in range(len(self.decisionTables[table]['annotation'])):
+                                name = self.decisionTables[table]['annotation'][annotation]
+                                text = self.rules[table][foundRule]['annotation'][annotation]
+                                annotations.append((name, text))
+                        newData['Executed Rule'].append(ruleId)
+                        if len(decisionAnnotations) > 0:
+                            newData['DecisionAnnotations'].append(decisionAnnotations)
+                        else:
+                            newData['DecisionAnnotations'].append([])
+                        if len(annotations) > 0:
+                            newData['RuleAnnotations'].append(annotations)
+                        else:
+                            newData['RuleAnnotations'].append([])
         self.decisionTables[table]['status'] = 'done'
         self.decisionTables[table]['recursionCount'] = 0
         return newData
@@ -4609,7 +5575,7 @@ class DMN():
         will be returned as a list of mismatches.
 
         Args:
-            None: The spreadsheet 'Test' must exist in the load Excel workbook.
+            None: The spreadsheet 'Test' must exist in a load Excel workbook.
 
         Returns:
             tuple: (testStatus, results)

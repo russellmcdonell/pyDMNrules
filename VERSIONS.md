@@ -1,3 +1,17 @@
+### 1.3.18 - WARNING - changed hitPolicy R and O - relased to PyPI
+ - Hit Policy 'RULES ORDER' (R)' and 'OUTPUT ORDER' (O) now return each output variable as a list,
+   as per the specification. Previously they return a list of 'Results' which was an error.
+   HOWEVER, this required a rewrite of the TherapyNoglossNodecision.xlsx example.
+ - All of the changes in this release are related to (limited) XML support and testing with DMN TCK (https://dmn-tck.github.io/tck/)
+ - cleaned up XML support - added support for decisionTables in businessKnowledge
+ - Removed Excel specific error messages
+ - Allowed Business Concepts and Attributes in the Glossary to contain spaces (which get replaced with '_')
+ - Added support for default output values (XML only)
+ - Allowed Priority hit policy decision tables to have **no** valid values
+ - Fixed filters of List Filters - e.g. EmployeeTable[name=LastName].deptNum[1]
+ - 'item' now optional in List filters
+ - Limited support for 'some/every in ... satifies expression'. 'expression' must be 'name relop expr'.
+ - Tested with DMN TCK conformance tests [27/28 passed conformance Level 2]
 ### 1.3.17 - Added Beta XML support
  - Implemented automatic disambiguation of clashing, automatically derived, Attribute names.
  - Fixed output for COLLECTION, RULES ORDER and OUTPUT ORDER Hit Policies

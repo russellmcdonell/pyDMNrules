@@ -2157,14 +2157,14 @@ class TestClass:
         (status, newData) = dmnRules.decide(data)
         assert 'errors' not in status
         assert isinstance(newData, list)        # A list of dictionaries
-        assert len(newData) == 8
+        assert len(newData) == 5
         assert isinstance(newData[-1], dict)
         assert 'Executed Rule' in newData[-1]
-        assert isinstance(newData[-1]['Executed Rule'], list)       # A list - one entry per rule run
-        (decision, table, rule) = newData[-1]['Executed Rule'][-1]
+        assert isinstance(newData[-1]['Executed Rule'], tuple)       # Only one rule run
+        (decision, table, rule) = newData[-1]['Executed Rule']
         assert decision == 'Decide DecisionMedication'
         assert table == 'DecisionMedication'
-        assert rule == 'warnInt'
+        assert rule == 'prescribe'
         assert 'Result' in newData[-1]
         assert 'Recommended Medication' in newData[-1]['Result']
         assert newData[-1]['Result']['Recommended Medication'] == 'Levofloxacin'
@@ -2177,6 +2177,43 @@ class TestClass:
         for i in range(len(results)):
             assert 'Mismatches' not in results[i]
         assert len(testStatus) == 3
+        for i in range(len(testStatus)):
+            assert 'errors' not in testStatus[i]
+
+    def test_simulation(self):
+        '''
+        Check that the simulation DMN xml file works
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.loadXML('../pyDMNrules/simulation.dmn')
+        assert 'errors' not in status
+        data = {}
+        data['Season'] = 'Summer'
+        data['How many guests'] = 5
+        data['Guests with children'] = True
+        (status, newData) = dmnRules.decide(data)
+        assert 'errors' not in status
+        assert isinstance(newData, list)
+        assert len(newData) == 2
+        assert 'Result' in newData[-1]
+        assert 'Executed Rule' in newData[-1]
+        assert 'Dish' in newData[-1]['Result']
+        assert newData[-1]['Result']['Dish'] == 'Light Salad and a nice Steak'
+        assert 'Beverages' in newData[-1]['Result']
+        assert newData[-1]['Result']['Beverages'] == ['Pinot Noir', 'Apple Juice']
+
+    def test_TestOfCure(self):
+        '''
+        Check Test Of Cure
+        '''
+        dmnRules = pyDMNrules.DMN()
+        status = dmnRules.load('../pyDMNrules/Test Of Cure.xlsx')
+        assert 'errors' not in status
+        (testStatus, results) = dmnRules.test()
+        assert len(results) == 9
+        for i in range(len(results)):
+            assert 'Mismatches' not in results[i]
+        assert len(testStatus) == 9
         for i in range(len(testStatus)):
             assert 'errors' not in testStatus[i]
 

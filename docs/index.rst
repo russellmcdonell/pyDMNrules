@@ -53,7 +53,11 @@ pyDMNrules
 ==========
 
 pyDMNrules builds a rules engine from an Excel workbook which may contain a 'Glossary' tab and a 'Decision' tab.
-Other tabs will contain the DMN rules tables use to build the rules engine.
+Other tabs will contain the DMN rules tables use to build the rules engine.  
+pyDMNrules uses pySFeel for it's FEEL interpreter. pySFeel implements most, but not all, of the FEEL standard; there is no support
+for 'if' statements, 'for' loops, the 'sort()' function or user defined functions.
+However, pyDMNrules does implement Decision Tables embedded within Decision Tables, which can be called recursively.
+'if' statements, 'for' loops and user defined functions can be implemented as embedded Decision Tables.
 
 Glossary - optional
 ===================
@@ -92,6 +96,19 @@ This can cause conflicts. For instance ':' is a valid character in a Variable, b
 If there are two Varibles, being 'C' and 'C:' then both will be transformed to an Attribute of 'C' and a Glossary item of 'Data.C', which will be ambiguous.
 This ambiguity will be resolved by pyDMNrules by adding a period ('.') and one or more digit characters to to the ambiguous Attribute.
 The function getGlossary() will return the Glossary (either supplied or constructed).
+
+'Variable', 'Business Concepts' and dictionaries
+------------------------------------------------
+All 'Variables' must be unique as 'Variables' are replaced with values when FEEL expressions are evaluated.
+'Business Concepts' are usually loose groupings of 'Variables' to aid in documentation of the decision.
+However, sometimes 'Business Concepts' represent data sources and multiple data sources may contain the same data concept, such ase 'id'.
+And it may be desirable to pass each data source as a dictionary or even a list of dictionaries.
+To facilitate this **pyDMNrules** recognises 'Variables' with a name constructed of 'Business Concept'.'Attribute'.
+If a single data element ('Variable'), passed to **pyDMNrules** is a dictionary (or a list of dictionaries) then the name of the 'Variable'
+must match a known 'Business Concept' and each key in the dictionary must match a known 'Attribute' in that 'Business Concept'.
+However, there is no reverse mapping for the returned result; each output must be a single 'Variable' from the 'Glossary'.
+Mapping indiviual output 'Variables' back into dictionaries is left as an exercise for the user.
+
 
 Decision -  optional
 ====================

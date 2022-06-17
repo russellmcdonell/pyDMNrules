@@ -23,7 +23,7 @@ author = 'Russell McDonell'
 
 # The full version, including alpha/beta/rc tags
 version = '1.3'
-release = '1.3.16'
+release = '1.3.18'
 
 master_doc = 'index'
 
