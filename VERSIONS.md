@@ -1,3 +1,6 @@
+### 1.3.19 -  - Added limited support for the sort() function - released to PyPI
+ - Added limited support for the sort() function - only the anonymous form [ sort(expr, function(name0, name1) expression)) ]. And 'expression' is limited to 'name0 < name1' or 'name0 > name1'. If the list to be sorted ('expr) is a list of Contexts, the name0 and name1 must take the form of name0.attr and name1.attr, and 'attr' must be the same attribute for both name0 and name1.
+ - Fixed bug in getSheets (adding defaultValues row/column to collection hit policies)
 ### 1.3.18 - WARNING - changed hitPolicy R and O - relased to PyPI
  - Hit Policy 'RULES ORDER' (R)' and 'OUTPUT ORDER' (O) now return each output variable as a list,
    as per the specification. Previously they return a list of 'Results' which was an error.

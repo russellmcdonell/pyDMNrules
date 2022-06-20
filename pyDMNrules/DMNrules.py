@@ -4072,7 +4072,7 @@ class DMN():
                 for i in range(len(self.decisionTables[table]['outputColumns'])):
                     variable = self.decisionTables[table]['outputColumns'][i]['name']
                     if 'default' in self.decisionTables[table]['outputColumns'][i]:
-                        if thisHitPolicy in ['U', 'A', 'F', 'C+', 'C<', 'C>', 'C#']:      # Unique, Any, First or Priority
+                        if thisHitPolicy in ['U', 'A', 'F']:      # Unique, Any or First
                             haveDefaults = True
                     if haveValidity:
                         if i == 0:
@@ -4239,7 +4239,7 @@ class DMN():
                 haveDefaults = False
                 for i in range(len(self.decisionTables[table]['outputRows'])):
                     if 'default' in self.decisionTables[table]['outputRows'][i]:
-                        if thisHitPolicy in ['U', 'A', 'F', 'C+', 'C<', 'C>', 'C#']:      # Unique, Any, First or Priority
+                        if thisHitPolicy in ['U', 'A', 'F']:      # Unique, Any or First
                             haveDefaults = True
                 for i in range(len(self.decisionTables[table]['inputRows'])):
                     variable = self.decisionTables[table]['inputRows'][i]['name']
