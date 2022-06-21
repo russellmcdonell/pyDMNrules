@@ -323,7 +323,7 @@ def collectContextTests(component):
     return context
 
 
-def collectTests(thisPattern):
+def collectTests():
     '''
     Collect the the tests and results from the tests XML file.
     For FEEL, tests become variables, to which values are assigned, using the FEEL <- assignment operator.
@@ -333,7 +333,7 @@ def collectTests(thisPattern):
               results become Python values that match the values returned by the pyDMNrules.decide() function.
     '''
 
-    global testNs
+    global testNs, pattern, thisPattern
 
     tests = []
     testNames = []
@@ -465,7 +465,7 @@ def collectTests(thisPattern):
 
 def collectListResults(listElement, variable):
 
-    global testNs
+    global testNs, thisPattern
 
     items = listElement.findall('item', namespaces=testNs)
     listData = []
@@ -503,11 +503,42 @@ def collectListResults(listElement, variable):
         elif newListElement is not None:
             listData.append(collectListResults(newListElement, thisVariable))
         elif components != []:
+            componentData = {}
             for component in components:
-                newVariable = variable + '.' + component.get('name')
-                if newVariable not in itemData:
-                    itemData[newVariable] = []
-                itemData[newVariable].append(collectContextResults(component, newVariable))
+                if thisPattern != '0013-sort':     # Sort expect dictionaries as outputs
+                    newVariable = variable + '.' + component.get('name')
+                    if newVariable not in itemData:
+                        itemData[newVariable] = []
+                    itemData[newVariable].append(collectContextResults(component, newVariable))
+                else:
+                    newVariable = component.get('name')
+                    value = component.find('value', namespaces=testNs)
+                    if value is not None:
+                        if '{' + testNs['xsi'] + '}nil' in value.keys():
+                            thisType = value.get('{' + testNs['xsi'] + '}nil')
+                            if thisType == 'true':
+                                componentData[newVariable] = None
+                            else:
+                                componentData[newVariable] = convertIn(value.text, False)
+                        elif '{' + testNs['xsi'] + '}type' in value.keys():
+                            thisType = value.get('{' + testNs['xsi'] + '}type')
+                            if thisType == 'xsd:string':
+                                componentData[newVariable] = value.text
+                            elif (thisType == 'xsd:decimal') or (thisType == 'xsd:double'):
+                                componentData[newVariable] = float(value.text)
+                            elif thisType == 'xsd:boolean':
+                                if value.text == 'true':
+                                    componentData[newVariable] = True
+                                else:
+                                    componentData[newVariable] = False
+                            else:
+                                componentData[newVariable] = convertIn(value.text, False)
+                        else:
+                            componentData[newVariable] = convertIn(value.text, False)
+                    else:
+                        componentData[newVariable] = convertIn(value.text, False)
+            if thisPattern == '0013-sort':     # Sort expect dictionaries as outputs
+                listData.append(componentData)
         else:
             print('Bad XML list item in results file')
             logging.warning('Bad list item in XML results file')
@@ -578,7 +609,8 @@ def logFailure(tests, results, data, newData):
         logging.debug('\tnewData\t%s', str(newData).encode(errors='replace'))
 
 
-
+pattern = ''
+thisPattern = ''
 
 # The main code
 if __name__ == '__main__':
@@ -648,7 +680,7 @@ Then process the file, named in the command line
         # Get all the patterns
         print('Testing Conformance Level', conformanceLevel)
         patterns = glob.glob(tckDir + '/tck-master/TestCases/compliance-level-' + conformanceLevel + '/[0-9]*')
-        # patterns = glob.glob(tckDir + '/tck-master/TestCases/compliance-level-' + conformanceLevel + '/0016*')
+        # patterns = glob.glob(tckDir + '/tck-master/TestCases/compliance-level-' + conformanceLevel + '/0013*')
         logging.info('Testing Conformance Level %s', conformanceLevel)
         for pattern in patterns:
             print('\tTesting', pattern)
@@ -679,7 +711,7 @@ Then process the file, named in the command line
                 logging.warning('failed - Bad DMN file %s - could not be loaded by useXML()', dmnFiles[0])
                 logging.debug("\tstatus {'errors': [%s]}", status['errors'][0])
                 continue
-            (tests, testNames, results, decisionNames) = collectTests(thisPattern)
+            (tests, testNames, results, decisionNames) = collectTests()
             variableNum = 0
             if len(tests) > 0:
                 for i in range(len(tests)):

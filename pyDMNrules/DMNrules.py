@@ -192,6 +192,8 @@ class DMN():
         skipNextToken = False
         everySome = False
         satisfies = False
+        inFunction = False
+        inSortFunction = False
         for tokenNum in range(len(yaccTokens)):
             if skipNextToken:
                 skipNextToken = False
@@ -212,12 +214,23 @@ class DMN():
                     everySome = True
                 elif token.type == 'SATISFIES':
                     satisfies = True
+                elif token.type == 'FUNCTIONFUNC':
+                    inFunction = True
+                elif token.type == 'RPAREN':
+                    if inFunction:
+                        inFunction = False
+                        inSortFunction = True
+                    else:
+                        inFunction = False
+                        inSortFunction = False
             elif everySome:
                 thisData += ' ' + token.value
                 everySome = False
             elif satisfies:
                 thisData += ' ' + token.value
                 satisfies = False
+            elif inFunction or inSortFunction:
+                thisData += token.value
             elif token.value in self.glossaryItems:     # If it's a valid name then leave it alone
                 if thisData != '':
                     thisData += ' '
