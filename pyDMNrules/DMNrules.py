@@ -5047,7 +5047,7 @@ class DMN():
                         if data[variable] != validityFixedValue:           # The Python data does not match the fixed valid value
                             failed = True
                         else:
-                            retval = True
+                            retVal = True
                     else:
                         (failed, retVal) = self.sfeel('{}'.format(testValidity))        # Execute the input validity test of variable as S-FEEL
                     if not validityIsFixed and failed:          # Report the bad S-FEEL
