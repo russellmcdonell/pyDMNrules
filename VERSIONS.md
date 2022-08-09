@@ -1,3 +1,24 @@
+### 1.4.0 - BREAKING Bug fix release - released to PyPI
+ - pySFeel changed parsing so that ranges with closed intervals are returned with round brackets (reverse facing square brackets are allowed on input, but will be converted to their equivalent round bracket)
+   **NOTE BREAKING CHANGE:** this may effect some existing of tests
+ - pySFeel fixed a bug in the equality test - now returns 'null' (Python value None) if values are of different data types
+   **NOTE BREAKING CHANGE:** this may effected some existing tests
+ - pySFeel fixed a bug in the string() function - now returns timezones for datetimes/time that have a timezone
+   **NOTE BREAKING CHANGE:** this may effected some existing implementations
+ - pySFeel fixed a bug in .weekday - now returns isoweekday() (now 1 - 7, was 0 - 6)
+   **NOTE BREAKING CHANGE:** this may effected some existing implementations
+ - Added decideTables() function for basing a decision on a specified list of Decision Tables.
+ - pySFeel changed the any()/all() functions which now return False/True for empty lists.
+ - Fixed bug when valid values (XML DMN) is a list of strings and there's a space after a comma
+ - Fixed bug when input test is just not() function [argument must be a boolean expression]
+ - Added suport for variable1 = variable2 being converted to variable1 in variable2 where variable2 is a list
+ - Fixed bug when output value is a Context
+ - pySFeel added support for 'instance of'
+ - pySFeel added support fo single endpoint and operator ranges
+ - pySFeel added support for named parameters in built-in functions
+ - pySFeel added support for context scoped variables - {a:1,b:a+1} - 'a' is a valid variable, but only inside the context and only after it has been defined.
+ - pySFeel added support for DMN 1.4 functions today() and now()
+ - Tested with DMN-TCK [Test Conformance Kit]. Pass rate: 1569/1771 (89%) [97% at Conformance Level 2 - the basics]
 ### 1.3.20 - Bug fix for sort() - released to PyPI
  - function() variable were being wrapped in double quotes
 ### 1.3.19 -  - Added limited support for the sort() function - released to PyPI

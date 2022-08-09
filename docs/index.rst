@@ -54,8 +54,8 @@ pyDMNrules
 
 pyDMNrules builds a rules engine from an Excel workbook which may contain a 'Glossary' tab and a 'Decision' tab.
 Other tabs will contain the DMN rules tables use to build the rules engine.  
-pyDMNrules uses pySFeel for it's FEEL interpreter. pySFeel implements most, but not all, of the FEEL standard; there is no support
-for 'if' statements, 'for' loops, the 'sort()' function or user defined functions.
+pyDMNrules uses [pySFeel](https://pysfeel.readthedocs.io/en/latest/) for it's FEEL interpreter. pySFeel implements most, but not all, of the FEEL standard; there is no support
+for 'if' statements, 'for' loops or user defined functions. There is limited support for the sort() function and the 'some/every ... satisfies' construct.
 However, pyDMNrules does implement Decision Tables embedded within Decision Tables, which can be called recursively.
 'if' statements, 'for' loops and user defined functions can be implemented as embedded Decision Tables.
 

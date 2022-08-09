@@ -2,7 +2,6 @@
 # pyDMNrules.py
 # -----------------------------------------------------------------------------
 
-from argparse import Namespace
 import sys
 import re
 import csv
@@ -40,6 +39,7 @@ class DMN():
         self.glossaryItems = {}         # a dictonary - self.glossaryItems[BusinessConcept.Attribute] = Variable
         self.glossaryConcepts = {}      # a dictionary of BusinessConcepts
         self.glossaryNames = ['glossary']
+        self.contextNames = []
         self.glossaryLoaded = False
         self.isLoaded = False
         self.testIsLoaded = False
@@ -107,7 +107,8 @@ class DMN():
                     break
             if isFunction:
                 continue
-            foundAt = foundLen = -1             # Find the nearest, longest replacement
+            foundAt = -1             # Find the nearest, longest replacement
+            foundLen = 0
             dotOperator = None
             foundVariable = None
             searchTo = text[at:].find('"')      # Stop replacing at the next string
@@ -154,20 +155,36 @@ class DMN():
                 newText += text[at:at + foundAt]
                 at += foundAt
             item = self.glossary[foundVariable]['item']             # Add BusinessConcept.Attribute to newText
-            replaced.append(foundVariable)
             newText += item
+            replaced.append(foundVariable)
             if dotOperator is not None:
                 newText += dotOperator
             at += foundLen
+            newText += ' '
         return (replaced, newText)
 
 
+    def isContextName(self, text):
+        if len(self.contextNames) < 1:
+            return False
+        for i in range(len(self.contextNames)):
+            if text in self.contextNames[i]:
+                return True
+        return False
+
     def data2sfeel(self, coordinate, sheet, text, isTest):
         # Check that a string of text (data) from an Excel spreadsheet cell or DMN XML file, is valid S-FEEL
-        # Start by replacing all 'Variable's with their BusinessConcept.Attribute equivalents (which are valid S-FEEL)
-        # print('data2sfeel:', "'{!s}".format(data), isTest)
+        # print('data2sfeel():', "'{!s}'".format(text), isTest)
 
         # Use the pySFeel tokenizer to look for strings that look like 'names', but aren't in the glossary
+        # These become strings, unless there's a reason not to do so - in a context, list filter, function etc.
+        textBits = text.split('\n')
+        for i in range(len(textBits)):
+            hasComment = textBits[i].find('//')
+            if hasComment != -1:
+                textBits[i] = textBits[i][:hasComment]
+            textBits[i] = textBits[i].strip()
+        text = ' '.join(textBits)
         isError = False
         tokens = self.lexer.tokenize(text)
         yaccTokens = []
@@ -183,126 +200,176 @@ class DMN():
                     isError = True
             else:
                 yaccTokens.append(token)
-        thisData = ''
         # Step through the tokens
-        foundContexts = []          # Allow for filters of Business Concepts
-        lastTokenValue = None
-        inContext = False
-        contextFilter = False
+        penultimateTokenValue = lastTokenValue = nextToken = afterNextToken = None
         skipNextToken = False
-        everySome = False
+        listFilter = False          # List followed by [NAME relop expr (or item NAME relop expr)
+        self.contextNames = []
+        everySome = False           # every/some ID sataisfies ID relop expr
         satisfies = False
-        inFunction = False
+        inFunction = False          # sort(list, function(ID) ID relop expr) or sort(list, function(ID1, ID2) ID1.x relop ID2.y)
         inSortFunction = False
+        expectName = False          # NAME expected (but not ID)
+        thisData = ''
         for tokenNum in range(len(yaccTokens)):
-            if skipNextToken:
+            token = yaccTokens[tokenNum]
+            if skipNextToken:       # Next token already handled
                 skipNextToken = False
+                penultimateTokenValue = lastTokenValue
                 lastTokenValue = token.value
                 continue
-            token = yaccTokens[tokenNum]
-            if token.type != 'NAME':    # If it doesn't look like a name then leave it alone
-                if (len(token.value) > 0) and (token.value[0] != '.') and (token.value != '[') and (thisData != ''):
-                    thisData += ' '
-                if (lastTokenValue == ']') and (token.value == '.'):
-                    contextFilter = True
+            if tokenNum < len(yaccTokens) - 1:
+                nextToken = yaccTokens[tokenNum + 1]
+                if tokenNum < len(yaccTokens) - 2:
+                    afterNextToken = yaccTokens[tokenNum + 2]
                 else:
-                    contextFilter = False
+                    afterNextToken = None
+            else:
+                nextToken = None
+            if token.type != 'NAME':    # If it doesn't look like a name then leave it alone
+                if (len(token.value) > 0) and (token.value[0] != '.') and (token.value != '[') and (thisData != '') and (thisData[-1] != ' '):
+                    thisData += ' '
                 thisData += token.value
-                if token.type == 'EVERY':
+                if (lastTokenValue == ']'):
+                    if (token.value == '.'):
+                        listFilter = False
+                        expectName = True
+                    elif token.value == '[':
+                        listFilter = True
+                        expectName = True
+                    else:
+                        listFilter = False
+                        expectName = False
+                if token.type == 'EVERY':       # some/every ID in satisfies ID relop expr
                     everySome = True
                 elif token.type == 'SOME':
                     everySome = True
                 elif token.type == 'SATISFIES':
                     satisfies = True
-                elif token.type == 'FUNCTIONFUNC':
+                elif token.type == 'FUNCTIONFUNC':      #sort(list, function(ID) ID relop expr) or sort(list, function(ID1, ID2) ID1 relop ID2)
                     inFunction = True
-                elif token.type == 'RPAREN':
-                    if inFunction:
+                elif token.type == 'RPAREN':        # End of a function
+                    if inFunction:                  # End of sort function, but still in sort()
                         inFunction = False
                         inSortFunction = True
                     else:
                         inFunction = False
                         inSortFunction = False
-            elif everySome:
-                thisData += ' ' + token.value
-                everySome = False
-            elif satisfies:
-                thisData += ' ' + token.value
-                satisfies = False
-            elif inFunction or inSortFunction:
-                thisData += token.value
-            elif token.value in self.glossaryItems:     # If it's a valid name then leave it alone
-                if thisData != '':
+                elif token.type == 'LCURLY':        # Start of a context
+                    self.contextNames.append([])
+                    expectName = True
+                elif (token.type == 'RCURLY') and (len(self.contextNames) > 0):
+                    discard = self.contextNames.pop()
+                    expectName = False
+                elif (token.type == 'COMMA') and (len(self.contextNames) > 0) and (afterNextToken is not None) and (afterNextToken.value == ':'):
+                    expectName = True
+                elif token.type == 'PERIOD':
+                    expectName = True
+                else:
+                    expectName = False
+                penultimateTokenValue = lastTokenValue
+                lastTokenValue = token.value
+                continue
+            if everySome or satisfies or inFunction or inSortFunction:
+                if (len(token.value) > 0) and (thisData != '') and (thisData[-1] != ' '):
                     thisData += ' '
                 thisData += token.value + ' '
-                inContext = False
-            elif token.value in self.glossaryConcepts:     # If it's a valid BUsiness Concept, then leave it alone, as it must be followed by a '['
-                thisData += token.value
-                if tokenNum < len(yaccTokens) - 1:      # Check for a dot operator after a valid name
-                    nextToken = yaccTokens[tokenNum + 1]
-                    if nextToken.value == '[':
-                        inContext = True
-                        foundContexts.insert(0, token.value)
-            elif inContext:
-                if token.value == 'index':          # 'index' keyword in a slice
+                penultimateTokenValue = lastTokenValue
+                lastTokenValue = token.value
+                continue
+            if listFilter:
+                if token.value == 'item':          # 'item keyword in a list filter
                     thisData += token.value + ' '
-                else:
-                    contextLen = len(foundContexts[0]) + 1
-                    for variable in self.glossaryConcepts[foundContexts[0]]:
-                        if token.value == variable[contextLen:]:
-                            thisData += token.value
-                            break
-                    else:
-                        thisData += '"' + token.value + '"'
-                        thisContext = None
-            elif contextFilter:
-                if len(foundContexts) > 0:
-                    contextLen = len(foundContexts[0]) + 1
-                    for variable in self.glossaryConcepts[foundContexts[0]]:
-                        if token.value == variable[contextLen:]:
-                            thisData += token.value
-                            break
-                    else:
-                        thisData += '"' + token.value + '"'
-                    foundContexts.pop(0)
-                else:
+                    penultimateTokenValue = lastTokenValue
+                    lastTokenValue = token.value
+                    continue
+                listFilter = False
+            if expectName:
+                if re.search(self.badFEELchars, token.value) is not None:
                     thisData += '"' + token.value + '"'
-                contextFilter = False
+                else:
+                    thisData += token.value + ' '
+                    if (nextToken is not None) and (nextToken.value == ':') and (len(self.contextNames) > 0):
+                        self.contextNames[-1].append(token.value)
+                expectName = False
+            elif self.isContextName(token.value) or (token.value in self.glossaryItems):     # If it's a valid name then leave it alone
+                if (thisData != '') and (thisData[-1] != ' '):
+                    thisData += ' '
+                thisData += token.value + ' '
+            elif (token.value in self.glossaryConcepts) and (nextToken is not None) and (nextToken.value == '['):     # If it's a valid Business Concept[, then leave it alone,
+                if (thisData != '') and (thisData[-1] != ' '):
+                    thisData += ' '
+                thisData += token.value + '['
+                skipNextToken = True
+                expectName = True
             else:       # Look for 'names' that are in the glossaryItems, but have a dot operator
-                if (token.value.endswith('.time')) and (token.value[:-5] in self.glossaryItems):    # Special test for '.time offset'
-                    if tokenNum < len(yaccTokens) - 1:      # Check for a dot operator after a valid name
-                        nextToken = yaccTokens[tokenNum + 1]
+                if (token.value.endswith('.time')) and ((token.value[:-5] in self.glossaryItems) or self.isContextName(token.value[:-5])):    # Special test for '.time offset'
+                    if nextToken is not None:      # Check for a dot operator after a valid name
                         if (nextToken.type == 'NAME') and (nextToken.value == 'offset'):
-                            if thisData != '':
+                            if (thisData != '') and (thisData[-1] != ' '):
                                 thisData += ' '
-                            thisData += token.value + '_offset'
+                            thisData += token.value + '_offset'     # Replace ' ' with '_' for the parser
                             skipNextToken = True
-                elif (token.value.endswith('.start')) and (token.value[:-6] in self.glossaryItems):    # Special test for '.start included'
-                    if tokenNum < len(yaccTokens) - 1:      # Check for a dot operator after a valid name
-                        nextToken = yaccTokens[tokenNum + 1]
+                elif (token.value.endswith('.start')) and ((token.value[:-6] in self.glossaryItems) or self.isContextName(token.value[:-6])):    # Special test for '.start included'
+                    if nextToken is not None:      # Check for a dot operator after a valid name
                         if (nextToken.type == 'NAME') and (nextToken.value == 'included'):
-                            if thisData != '':
+                            if (thisData != '') and (thisData[-1] != ' '):
                                 thisData += ' '
-                            thisData += token.value + '_included'
+                            thisData += token.value + '_included'     # Replace ' ' with '_' for the parser
                             skipNextToken = True
-                elif (token.value.endswith('.end')) and (token.value[:-4] in self.glossaryItems):    # Special test for '.end included'
-                    if tokenNum < len(yaccTokens) - 1:      # Check for a dot operator after a valid name
-                        nextToken = yaccTokens[tokenNum + 1]
+                elif (token.value.endswith('.end')) and ((token.value[:-4] in self.glossaryItems) or self.isContextName(token.value[:-4])):    # Special test for '.end included'
+                    if nextToken is not None:      # Check for a dot operator after a valid name
                         if (nextToken.type == 'NAME') and (nextToken.value == 'included'):
-                            if thisData != '':
+                            if (thisData != '') and (thisData[-1] != ' '):
                                 thisData += ' '
-                            thisData += token.value + '_included'
+                            thisData += token.value + '_included'     # Replace ' ' with '_' for the parser
                             skipNextToken = True
                 else:
                     for i in range(len(self.DMNdotOperators)):
                         if (token.value.endswith(self.DMNdotOperators[i])) and (token.value[:-len(self.DMNdotOperators[i])] in self.glossaryItems):
-                            if thisData != '':
+                            if (thisData != '') and (thisData[-1] != ' '):
                                 thisData += ' '
                             thisData += token.value + ' '
                             break
-                    else:                          # Otherwise, assume it's a string that is missing it's double quotes
-                        thisData += '"' + token.value + '"'
+                    else:
+                        if (penultimateTokenValue == ']') and (lastTokenValue == '['):            # Assume context filter
+                            thisData += token.value + ' '
+                        elif (lastTokenValue is not None) and (lastTokenValue.endswith('(') or (lastTokenValue == ',')):
+                            if (nextToken is not None) and (nextToken.type == 'COLON'):
+                                if lastTokenValue == ',':
+                                    thisData += ' '
+                                thisData += token.value     # Assume it's a named parameter for a built in function
+                            elif (tokenNum < len(yaccTokens) - 2) and (yaccTokens[tokenNum + 2].type == 'COLON'):
+                                if (token.value == 'start') and (yaccTokens[tokenNum + 1].value == 'position'):
+                                    if lastTokenValue == ',':
+                                        thisData += ' '
+                                    thisData += token.value + ' ' + 'position'
+                                    skipNextToken = True
+                                elif (token.value == 'grouping') and (yaccTokens[tokenNum + 1].value == 'separator'):
+                                    if lastTokenValue == ',':
+                                        thisData += ' '
+                                    thisData += token.value + ' ' + 'separator'
+                                    skipNextToken = True
+                                elif (token.value == 'decimal') and (yaccTokens[tokenNum + 1].value == 'separator'):
+                                    if lastTokenValue == ',':
+                                        thisData += ' '
+                                    thisData += token.value + ' ' + 'separator'
+                                    skipNextToken = True
+                                else:                          # Otherwise, assume it's a string that is missing it's double quotes
+                                    if lastTokenValue == ',':
+                                        thisData += ' '
+                                    thisData += '"' + token.value + '"'
+                            else:                          # Otherwise, assume it's a string that is missing it's double quotes
+                                if lastTokenValue == ',':
+                                    thisData += ' '
+                                thisData += '"' + token.value + '"'
+                        else:                          # Otherwise, assume it's a string that is missing it's double quotes
+                            if (thisData != '') and (thisData[-1] != ' '):
+                                thisData += ' '
+                            thisData += '"' + token.value + '"'
+            penultimateTokenValue = lastTokenValue
             lastTokenValue = token.value
+        # print('data2sfeel(): returning', thisData)
         return thisData
 
 
@@ -325,7 +392,7 @@ class DMN():
         # Check for a comma separated list of strings - however, is only a list of tests if it is not a FEEL list
         listOfTests = []
         origList = thisTest
-        if (len(thisTest) > 0) and (thisTest[0] != '[') and (thisTest[-1] != ']'):
+        if (len(thisTest) > 0) and ((thisTest[0] != '[') or (thisTest[-1] != ']')):
             try:
                 for row in csv.reader([thisTest], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     listOfTests = list(row)
@@ -390,7 +457,7 @@ class DMN():
             withString = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([withString], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([withString], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -412,7 +479,7 @@ class DMN():
             withString = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([withString], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([withString], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -438,7 +505,7 @@ class DMN():
             # There can be one or two arguments
             parameters = []
             try:
-                for row in csv.reader([match.group(1)], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([match.group(1)], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -466,7 +533,7 @@ class DMN():
             isValue = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([isValue], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([isValue], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -502,7 +569,7 @@ class DMN():
             thisRange = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -538,7 +605,7 @@ class DMN():
             thisRange = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -574,7 +641,7 @@ class DMN():
             thisRange = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -610,7 +677,7 @@ class DMN():
             thisRange = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -646,7 +713,7 @@ class DMN():
             thisRange = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -682,7 +749,7 @@ class DMN():
             thisRange = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -718,7 +785,7 @@ class DMN():
             thisRange = match.group(1)
             parameters = []
             try:
-                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([thisRange], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     parameters = list(row)
             except:
                 pass
@@ -746,7 +813,7 @@ class DMN():
         # Check for not()/not and in()/in
         # We can have 'variable' '[not] in' 'test'
         # or 'test' '[not] in' 'variable'
-        variableIsNot = False
+        variableIsNot = False           # unary not - which we map to the not() function
         if testIsNot:
             if thisTest.startswith('not '):
                 if sheet is None:
@@ -754,18 +821,17 @@ class DMN():
                 else:
                     self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
-            variableIsNot = True
         elif not wasString and thisTest.startswith('not '):
             variableIsNot = True
             thisTest = thisTest[4:].strip()
             origList = thisTest
             try:
-                for row in csv.reader([thisTest], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                for row in csv.reader([thisTest], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                     listOfTests = list(row)
             except:
                 pass
-        variableIsIn1 = False
-        variableIsIn2 = False
+        variableIsIn1 = False       # Unary In
+        variableIsIn2 = False       # In function
         match = re.match(r'^in\s*\((.*)\)$', thisTest)
         if not wasString and match is not None:
             thisTest = match.group(1)
@@ -820,8 +886,8 @@ class DMN():
                 else:
                     self.errors.append("Bad S-FEEL '{!r}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
-            if variableIsNot:               # Not specified - in either specified or implied
-                return self.data2sfeel(coordinate, sheet, variable + ' not(in ' + thisTest + ')', False)
+            if variableIsNot or testIsNot:               # Not specified - in either specified or implied
+                return self.data2sfeel(coordinate, sheet, 'not(' + variable + ' in ' + thisTest + ')', False)
             else:                   # in either specified or implied
                 return self.data2sfeel(coordinate, sheet, variable + ' in ' + thisTest, False)
 
@@ -857,7 +923,7 @@ class DMN():
                 else:
                     self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
-            if variableIsNot:               # Not specified - either unary or function
+            if variableIsNot or testIsNot:               # Not specified - either unary or function
                 return 'not(' + variable + ' in(' + ','.join(theseTests) + '))'
             else:                   # in either specified or implied
                 return variable + ' in(' + ','.join(theseTests) + ')'
@@ -878,11 +944,11 @@ class DMN():
                 else:
                     self.errors.append("Bad S-FEEL '{!s}' at '{!s}' on sheet '{!s}'".format(test, coordinate, sheet))
                 return 'null'
-            if variableIsNot:               # 'not' - either specified or implied
+            if variableIsNot or testIsNot:               # 'not' - either specified or implied
                 if variableIsIn1:
-                    return self.data2sfeel(coordinate, sheet, variable + ' not(in ' + thisTest + ')', False)
+                    return self.data2sfeel(coordinate, sheet, 'not(' + variable + ' in ' + thisTest + ')', False)
                 elif variableIsIn2:
-                    return self.data2sfeel(coordinate, sheet, variable + ' not(in(' + thisTest + '))', False)
+                    return self.data2sfeel(coordinate, sheet, 'not(' + variable + ' in(' + thisTest + '))', False)
             else:
                 if variableIsIn1:
                     return self.data2sfeel(coordinate, sheet, variable + ' in ' + thisTest, False)
@@ -904,8 +970,11 @@ class DMN():
                     return self.data2sfeel(coordinate, sheet, thisTest + ' in ' + variable, False)
 
         # All that is left is 'variable' '=' 'test'
+        # if 'test' turns out to be a variable, which is a list, and '=' should be 'in' then we will have to deal with this later
         if wasString:
             return self.data2sfeel(coordinate, sheet, variable + ' = "' + thisTest + '"', False)
+        elif variableIsNot or testIsNot:
+            return self.data2sfeel(coordinate, sheet, 'not( ' + variable + ' = ' + thisTest + ')', False)
         else:
             return self.data2sfeel(coordinate, sheet, variable + ' = ' + thisTest, False)
 
@@ -2628,18 +2697,26 @@ class DMN():
                     newValidity = [validityTest]
                 else:
                     # Allow for multi-word strings, wrapped in double quotes with embedded commas - require csv.excel compliance
+                    isList = False
                     try:
-                        for row in csv.reader([validityTest], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                        for row in csv.reader([validityTest], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                             validityTests = list(row)
+                            isList = True
                     except:
                         validityTests = [validityTest]
-                    for validTest in validityTests:         # Each validity value should be a valid S-FEEL constant
-                        (replaced, validTest) = self.replaceVariable(validTest)
-                        if not haveDecision:
-                            theseInputs[table] += replaced
-                        sfeelText = self.data2sfeel(coordinate, sheet, validTest, False)
+                    for thisTest in validityTests:         # Each validity value should be a valid S-FEEL constant which we have to turn into a Python constant
+                        if isList:
+                            aTest = thisTest.replace('"', '\\"')
+                            testAt = validityTest.find(aTest)               # Must exists
+                            if (testAt > 0) and (validityTest[testAt - 1] == '"'):
+                                aTest = '"' + aTest.strip() + '"'
+                            else:
+                                aTest = aTest.strip()
+                        else:
+                            aTest = thisTest.strip()
+                        sfeelText = self.data2sfeel(coordinate, sheet, aTest, False)
                         if sfeelText is None:               # Not valid FEEL - make this a FEEL string
-                            (failed, validValue) = self.sfeel('{}'.format('"' + validTest + '"'))
+                            (failed, validValue) = self.sfeel('{}'.format('"' + aTest + '"'))
                             if failed:
                                 self.errors.append("Bad S-FEEL in table '{!s}' at '{!s}' on sheet '{!s}'".format(table, coordinate, sheet))
                                 status = {}
@@ -2840,10 +2917,12 @@ class DMN():
             xmlFile = open(DMNxmlFile, 'rt', newline='')
             text = xmlFile.read()
         except Exception as e:
+            xmlFile.close()        
             self.errors.append("No readable DMN compliant XML file named '{!s}'!".format(DMNxmlFile))
             status = {}
             status['errors'] = self.errors
-            return status        
+            return status
+        xmlFile.close()        
         return self.useXML(text)
 
 
@@ -3043,7 +3122,7 @@ class DMN():
                 if len(components) > 0:     # This is a Context, which we map to a Business Concept with Business Attributes
                     concept = variable.replace(' ', '_')
                     if re.search(self.badFEELchars, concept) is not None:
-                        self.errors.append("Invalid XML:b Bad Business Concept '{!s}'".format(concept))
+                        self.errors.append("Invalid XML: Bad Business Concept '{!s}'".format(concept))
                         status = {}
                         status['errors'] = self.errors
                         return status
@@ -3131,6 +3210,14 @@ class DMN():
                         self.glossaryNames.append('Annotation')
                 else:
                     self.glossary[variable]['annotations'] = []
+                    
+        self.glossaryLoaded = True
+        self.initGlossary()
+        if len(self.errors) > 0:
+            self.glossaryLoaded = False
+            status = {}
+            status['errors'] = self.errors
+            return status
         
         XMLdecisions = []
         self.rules = {}
@@ -3194,11 +3281,13 @@ class DMN():
                 if encapsulatedLogic is not None:
                     decisionVariable = encapsulatedLogic.find('variable', namespaces=ns)
                     literal = encapsulatedLogic.find('literalExpression', namespaces=ns)
+                    listOutput = encapsulatedLogic.find('list', namespaces=ns)
                     context = encapsulatedLogic.find('context', namespaces=ns)
                     invocation = encapsulatedLogic.find('invocation', namespaces=ns)
                 else:
                     decisionVariable = decision.find('variable', namespaces=ns)
                     literal = decision.find('literalExpression', namespaces=ns)
+                    listOutput = decision.find('list', namespaces=ns)
                     context = decision.find('context', namespaces=ns)
                     invocation = decision.find('invocation', namespaces=ns)
                 if literal is not None:
@@ -3207,6 +3296,19 @@ class DMN():
                     outputValue = text.text
                     theseOutputs[table].append((False, variable))
                     outputs.append((variable, None, outputValue))
+                elif listOutput is not None:
+                    variable = decision.get('name')
+                    literals = listOutput.findall('literalExpression', namespaces=ns)
+                    thisOutput = '['
+                    for thisLiteral in literals:
+                        text = thisLiteral.find('text', namespaces=ns)
+                        outputValue = text.text
+                        if thisOutput != '[':
+                            thisOutput += ', '
+                        thisOutput += outputValue
+                    thisOutput += ']'
+                    theseOutputs[table].append((False, variable))
+                    outputs.append((variable, None, thisOutput))
                 elif context is not None:
                     contextEntries = context.findall('contextEntry', namespaces=ns)
                     for thisEntry in contextEntries:
@@ -3269,6 +3371,12 @@ class DMN():
                                                         self.glossaryNames.append('Annotation')
                                                 else:
                                                     self.glossary[thisVariable]['annotations'] = []
+                                                (failed, retVal) = self.sfeel('{} <- null'.format(item))
+                                                if failed:
+                                                    self.errors.append("Bad S-FEEL when initializing Glossary with '{} <- null'".format(item))
+                                                    status = {}
+                                                    status['errors'] = self.errors
+                                                    return status
                 elif invocation is not None:
                     variable = 'Execute'
                     literal = invocation.find('literalExpression', namespaces=ns)
@@ -3314,6 +3422,12 @@ class DMN():
                                                 self.glossaryNames.append('Annotation')
                                         else:
                                             self.glossary[thisVariable]['annotations'] = []
+                                        (failed, retVal) = self.sfeel('{} <- null'.format(item))
+                                        if failed:
+                                            self.errors.append("Bad S-FEEL when initializing Glossary with '{} <- null'".format(item))
+                                            status = {}
+                                            status['errors'] = self.errors
+                                            return status
 
                 # Now build the rule
                 self.rules[table].append({})
@@ -3369,6 +3483,12 @@ class DMN():
                                     self.glossaryNames.append('Annotation')
                             else:
                                 self.glossary[thisVariable]['annotations'] = []
+                            (failed, retVal) = self.sfeel('{} <- null'.format(item))
+                            if failed:
+                                self.errors.append("Bad S-FEEL when initializing Glossary with '{} <- null'".format(item))
+                                status = {}
+                                status['errors'] = self.errors
+                                return status
                     self.decisionTables[table]['outputColumns'].append({})
                     self.decisionTables[table]['outputColumns'][-1]['name'] = thisVariable
                     self.decisionTables[table]['outputValidity'].append([])
@@ -3520,20 +3640,26 @@ class DMN():
                         self.glossary[variable]['concept'] = 'Data'
                         self.glossaryItems[item] = variable
                         self.glossaryConcepts['Data'].append(variable)
+                        (failed, retVal) = self.sfeel('{} <- null'.format(item))
+                        if failed:
+                            self.errors.append("Bad S-FEEL when initializing Glossary with '{} <- null'".format(item))
+                            status = {}
+                            status['errors'] = self.errors
+                            return status
                     annotation = None
                     if 'typeRef' in inputExpression.keys():
                         typeRef = inputExpression.get('typeRef')
                         if typeRef in XMLitemDefinitions:
                             thisTypeRef = XMLitemDefinitions[typeRef].find('typeRef', namespaces=ns)
                             if thisTypeRef is not None:
-                                typeRef = thisTypeRef.text
+                                typeRef = thisTypeRef
                                 if typeRef.text is None:
                                     annotation = '(' + typeRef + ')'
                                 else:
                                     annotation = '(' + typeRef.text + ')'
                             elif 'typeRef' in XMLitemDefinitions[typeRef].keys():
-                                thisTypeRef = XMLitemDefinitions[typeRef].get('typeRef')
-                                annotation = '(' + thisTypeRef + ')'
+                                typeRef = XMLitemDefinitions[typeRef].get('typeRef')
+                                annotation = '(' + typeRef + ')'
                         else:
                             annotation = '(' + typeRef + ')'
                     else:
@@ -3615,15 +3741,17 @@ class DMN():
                                 if value == newValue:           # No variables/items in 'test' - it's won't change with changes to input values
                                     (failed, newValue) = self.sfeel('{}'.format(value))
                                     if failed:
-                                        self.errors.append("Bad S-FEEL in table '{!s}'".format(table))
+                                        self.errors.append("Bad S-FEEL in table '{!s}', '{!s}', '{!s}'".format(table, text.text, validityTest))
                                         status = {}
                                         status['errors'] = self.errors
                                         return status
                                     else:
                                         isFixed = True
                                         fixedValue = newValue
+                        # print("Setting inputvalidity of '{!s}' for table '{!s}' to '{!s}' ({!s},{!s})".format(variable, table, validityTest, isFixed, fixedValue))
                         self.decisionTables[table]['inputValidity'].append((validityTest, isFixed, fixedValue))
                     else:
+                        # print("Setting inputvalidity of '{!s}' for table '{!s}' to '{!s}' ({!s},{!s})".format(variable, table, validityTest, isFixed, fixedValue))
                         self.decisionTables[table]['inputValidity'].append((None, False, None))
 
                 # Get all the decisionTable outputs
@@ -3663,6 +3791,12 @@ class DMN():
                         self.glossary[variable]['concept'] = 'Data'
                         self.glossaryItems[item] = variable
                         self.glossaryConcepts['Data'].append(variable)
+                        (failed, retVal) = self.sfeel('{} <- null'.format(item))
+                        if failed:
+                            self.errors.append("Bad S-FEEL when initializing Glossary with '{} <- null'".format(item))
+                            status = {}
+                            status['errors'] = self.errors
+                            return status
                         annotation = None
                         if 'typeRef' in outputVariable.keys():
                             annotation = '(' + outputVariable.get('typeRef') + ')'
@@ -3718,16 +3852,26 @@ class DMN():
                             newValidity = [validityTest]
                         else:
                             # Allow for multi-word strings, wrapped in double quotes with embedded commas - require csv.excel compliance
+                            isList = False
                             try:
-                                for row in csv.reader([validityTest], dialect=csv.excel, doublequote=False, escapechar='\\'):
+                                for row in csv.reader([validityTest], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
                                     validityTests = list(row)
+                                    isList = True
                             except:
                                 validityTests = [validityTest]
-                            for validTest in validityTests:         # Each validity value should be a valid S-FEEL constant
-                                (replaced, validTest) = self.replaceVariable(validTest)
-                                sfeelText = self.data2sfeel(None, None, validTest, False)
+                            for thisTest in validityTests:         # Each validity value should be a valid S-FEEL constant which we have to turn into a Python constant
+                                if isList:
+                                    aTest = thisTest.replace('"', '\\"')
+                                    testAt = validityTest.find(aTest)               # Must exists
+                                    if (testAt > 0) and (validityTest[testAt - 1] == '"'):
+                                        aTest = '"' + aTest.strip() + '"'
+                                    else:
+                                        aTest = aTest.strip()
+                                else:
+                                    aTest = thisTest.strip()
+                                sfeelText = self.data2sfeel(None, None, aTest, False)
                                 if sfeelText is None:               # Not valid FEEL - make this a FEEL string
-                                    (failed, validValue) = self.sfeel('{}'.format('"' + validTest + '"'))
+                                    (failed, validValue) = self.sfeel('{}'.format('"' + aTest + '"'))
                                     if failed:
                                         self.errors.append("Bad S-FEEL in table '{!s}'".format(table))
                                         status = {}
@@ -3742,7 +3886,7 @@ class DMN():
                                         return status
                                 newValidity.append(validValue)
                                 try:
-                                    validValue = float(validValue)
+                                    validValue = float(aTest)
                                     newValidity.append(validValue)
                                 except:
                                     pass
@@ -3773,7 +3917,7 @@ class DMN():
                             status['errors'] = self.errors
                             return status
                         test = text.text
-                        if test == '-':
+                        if (test == '-') or (test == '') or (test is None):
                             inputNum += 1
                             continue
                         isFixed = False
@@ -3792,23 +3936,23 @@ class DMN():
                                 if value == newValue:           # No variables/items in 'test' - it's won't change with changes to input values
                                     (failed, newValue) = self.sfeel('{}'.format(value))
                                     if failed:
-                                        self.errors.append("Bad S-FEEL in table '{!s}' at '{!s}' on sheet '{!s}'".format(table, None, None))
+                                        self.errors.append("Bad S-FEEL in table'{!s}'".format(table,))
                                         status = {}
                                         status['errors'] = self.errors
                                         return status
                                     else:
                                         isFixed = True
                                         fixedValue = newValue
-                            if preferredOrientation == 'Rule-as-Row':
+                        if preferredOrientation == 'Rule-as-Row':
+                            self.rules[table][-1]['tests'].append((variable, test, inputNum, isFixed, fixedValue, 'column', None, None))
+                        elif preferredOrientation == 'Rule-as-Column':
+                            self.rules[table][-1]['tests'].append((variable, test, inputNum, isFixed, fixedValue, 'row', None, None))
+                        else:
+                            if crossNum % 2 == 0:
                                 self.rules[table][-1]['tests'].append((variable, test, inputNum, isFixed, fixedValue, 'column', None, None))
-                            elif preferredOrientation == 'Rule-as-Column':
-                                self.rules[table][-1]['tests'].append((variable, test, inputNum, isFixed, fixedValue, 'row', None, None))
                             else:
-                                if crossNum % 2 == 0:
-                                    self.rules[table][-1]['tests'].append((variable, test, inputNum, isFixed, fixedValue, 'column', None, None))
-                                else:
-                                    self.rules[table][-1]['tests'].append((variable, test, inputNum, isFixed, fixedValue, 'row', None, None))
-                                crossNum += 1
+                                self.rules[table][-1]['tests'].append((variable, test, inputNum, isFixed, fixedValue, 'row', None, None))
+                            crossNum += 1
                         inputNum += 1
                     outputNum = 0
                     for outputEntry in rule.findall('outputEntry', namespaces=ns):
@@ -4076,14 +4220,14 @@ class DMN():
                 else:
                     sheets[table] += '<tr><th style="{};{};{}">{}</th>'.format(singleLeft, doubleBottom, singleTop, self.decisionTables[table]['hitPolicy'])
                 for i in range(len(self.decisionTables[table]['inputColumns'])):
-                    variable = self.decisionTables[table]['inputColumns'][i]['name']
+                    variable = repr(self.decisionTables[table]['inputColumns'][i]['name'])[1:-1].replace('\\\\', '\\')
                     if haveValidity:
                         sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(inputColor, singleLeft, singleBottom, singleTop, variable)
                     else:
                         sheets[table] += '<th style="{};{};{};{}">{}</th>'.format(inputColor, singleLeft, doubleBottom, singleTop, variable)
                 haveDefaults = False
                 for i in range(len(self.decisionTables[table]['outputColumns'])):
-                    variable = self.decisionTables[table]['outputColumns'][i]['name']
+                    variable = repr(self.decisionTables[table]['outputColumns'][i]['name'])[1:-1].replace('\\\\', '\\')
                     if 'default' in self.decisionTables[table]['outputColumns'][i]:
                         if thisHitPolicy in ['U', 'A', 'F']:      # Unique, Any or First
                             haveDefaults = True
@@ -4181,9 +4325,11 @@ class DMN():
                                 break
                         else:
                             thisTest = '-'
+                        thisTest = repr(thisTest)[1:-1].replace('\\\\', '\\')
                         sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, thisTest)
                     for i in range(len(self.rules[table][thisRule]['outputs'])):      # Output in this decision rule
                         (name, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][thisRule]['outputs'][i]
+                        result = repr(result)[1:-1].replace('\\\\', '\\')
                         if i == 0:
                             if not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
                                 sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
@@ -4215,6 +4361,7 @@ class DMN():
                             result = self.decisionTables[table]['outputColumns'][i]['default']
                         else:
                             result = self.decisionTables[table]['outputColumns'][i]['name']
+                        result = repr(result)[1:-1].replace('\\\\', '\\')
                         if i == 0:
                             if not haveAnnotation and (i == (len(self.decisionTables[table]['outputColumns']) - 1)):
                                 sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
@@ -4255,8 +4402,7 @@ class DMN():
                         if thisHitPolicy in ['U', 'A', 'F']:      # Unique, Any or First
                             haveDefaults = True
                 for i in range(len(self.decisionTables[table]['inputRows'])):
-                    variable = self.decisionTables[table]['inputRows'][i]['name']
-                    variable = self.glossary[variable]['item']
+                    variable = repr(self.decisionTables[table]['inputRows'][i]['name'])[1:-1].replace('\\\\', '\\')
                     sheets[table] += '<tr>'
                     if i == 0:
                         sheets[table] += '<td style="{};{};{};{}">{}</td>'.format(inputColor, singleLeft, singleBottom, singleTop, variable)
@@ -4289,6 +4435,7 @@ class DMN():
                                 break
                         else:
                             thisTest = '-'
+                        thisTest = repr(thisTest)[1:-1].replace('\\\\', '\\')
                         if thisRule == 0:           # First column
                             if (thisRule == (len(self.rules[table]) - 1)) and not haveDefaults:          # And Last column
                                 if i == 0:              # first row
@@ -4356,9 +4503,7 @@ class DMN():
                     sheets[table] += '</tr>'
                 for i in range(len(self.decisionTables[table]['outputRows'])):
                     sheets[table] += '<tr>'
-                    variable = self.decisionTables[table]['outputRows'][i]['name']
-                    if variable != 'Execute':
-                        variable = self.glossary[variable]['item']
+                    variable = repr(self.decisionTables[table]['outputRows'][i]['name'])[1:-1].replace('\\\\', '\\')
                     if i == (len(self.decisionTables[table]['outputRows']) - 1):
                         sheets[table] += '<td style="{};{};{}">{}</td>'.format(outputColor, singleLeft, doubleBottom, variable)
                     else:
@@ -4376,6 +4521,7 @@ class DMN():
                                 sheets[table] += '<td style="{};{}">{}</td>'.format(singleLeft, singleBottom, self.decisionTables[table]['outputValidity'][i])
                     for thisRule in range(len(self.rules[table])):      # Every rule (row) in this Decision Table
                         (name, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][thisRule]['outputs'][i]
+                        result = repr(result)[1:-1].replace('\\\\', '\\')
                         if thisRule == 0:           # First column
                             if (thisRule == (len(self.rules[table]) - 1)) and not haveDefaults:      # And last column
                                 if i == (len(self.decisionTables[table]['outputRows']) - 1):        # Last row
@@ -4401,6 +4547,7 @@ class DMN():
                             result = self.decisionTables[table]['outputRows'][i]['default']
                         else:
                             result = self.decisionTables[table]['outputRows'][i]['name']
+                        result = repr(result)[1:-1].replace('\\\\', '\\')
                         if len(self.rules[table]) == 0:             # and first column
                             if i == (len(self.decisionTables[table]['outputRows']) - 1):        # Last row
                                 sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, doubleBottom, singleRight, result)
@@ -4452,22 +4599,16 @@ class DMN():
                 columns = []
                 for i in range(len(self.decisionTables[table]['inputColumns'])):
                     variable = self.decisionTables[table]['inputColumns'][i]['name']
-                    if variable != 'Execute':
-                        variable = self.glossary[variable]['item']
                     if variable not in columns:
                         columns.append(variable)
                 rows = []
                 for i in range(len(self.decisionTables[table]['inputRows'])):
                     variable = self.decisionTables[table]['inputRows'][i]['name']
-                    if variable != 'Execute':
-                        variable = self.glossary[variable]['item']
                     if variable not in rows:
                         rows.append(variable)
                 rowspan = len(columns) + 1
                 colspan = len(rows) + 1
-                variable = self.decisionTables[table]['output']['name']
-                if variable != 'Execute':
-                    variable = self.glossary[variable]['item']
+                variable = repr(self.decisionTables[table]['output']['name'])[1:-1].replace('\\\\', '\\')
                 sheets[table] += '<tr><td rowspan="{}" colspan="{}" style="{};{};{};{}">{}</td>'.format(rowspan, colspan, outputColor, singleLeft, doubleBottom, singleTop, variable)
                 colspan = len(self.decisionTables[table]['inputColumns'])
                 sheets[table] += '<td colspan="{}" style="{};{};{};{};{}">{}</td></tr>'.format(colspan, inputColor, doubleLeft, singleBottom, singleTop, singleRight, ','.join(columns))
@@ -4476,7 +4617,6 @@ class DMN():
                     for j in range(len(self.decisionTables[table]['inputColumns'])):
                         for k in range(len(self.decisionTables[table]['inputColumns'][j]['tests'])):
                             (name, test, dummy, isFixed, fixedValue, direction, coordinate, sheet) = self.decisionTables[table]['inputColumns'][j]['tests'][k]
-                            name = self.glossary[name]['item']
                             if name == columns[i]:
                                 thisTest = test.replace('<', '&lt;').replace('>', '&gt;')
                                 if i == (len(columns) - 1):         # Last row of inputs
@@ -4535,7 +4675,7 @@ class DMN():
                             (name, test, dummy, isFixed, fixedValue, direction, coordinate, sheet) = self.decisionTables[table]['inputRows'][j]['tests'][k]
                             name = self.glossary[name]['item']
                             if name == rows[i]:
-                                thisTest = test.replace('<', '&lt;').replace('>', '&gt;')
+                                thisTest = repr(test.replace('<', '&lt;').replace('>', '&gt;'))[1:-1].replace('\\\\', '\\')
                                 if not inRow:
                                     sheets[table] += '<tr>'
                                 sheets[table] += '<td style="{};{};text-align:center">{}</td>'.format(singleLeft, singleBottom, thisTest)
@@ -4546,6 +4686,7 @@ class DMN():
                             sheets[table] += '<td style="{};{};text-align:center">-</td>'.format(singleLeft, singleBottom)
                         for k in range(len(self.decisionTables[table]['inputColumns'])):
                             (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][thisRule]['outputs'][0]
+                            result = repr(result)[1:-1].replace('\\\\', '\\')
                             if k == 0:
                                 if k == (len(self.decisionTables[table]['inputColumns']) - 1):
                                     sheets[table] += '<td style="{};{};{};text-align:center">{}</td>'.format(doubleLeft, singleBottom, singleRight, result)
@@ -4585,13 +4726,14 @@ class DMN():
                 continue
             foundAt = foundLen = -1             # Find the nearest, longest replacement
             foundItem = None
+            dotOperator = None
             searchTo = text[at:].find('"')      # Stop replacing at the next string
             if searchTo == -1:
                 searchTo = to
             else:
                 searchTo += at
             for item in self.glossaryItems:
-                thisItem = re.sub(r'\.', r'\\\.', item)
+                thisItem = re.sub(r'\.', r'\\.', item)
                 match = re.search(r'\b' + thisItem + r'\b', text[at:searchTo])
                 if match is not None:
                     if ((foundAt == -1) or (match.start() < foundAt)):                  # First found or nearer find
@@ -4602,6 +4744,15 @@ class DMN():
                         foundAt = match.start()
                         foundLen = len(item)
                         foundItem = item
+                    else:
+                        continue
+                    # Check for items with a dot operator
+                    dotOperator = None
+                    for i in range(len(self.DMNdotOperators)):
+                        if text[at + foundAt + foundLen:].startswith(self.DMNdotOperators[i]):
+                            dotOperator = self.DMNdotOperators[i]
+                            foundLen += len(dotOperator)
+                            break
             if foundAt == -1:               # Nothing found
                 newText += text[at:searchTo]
                 at = searchTo
@@ -4609,11 +4760,17 @@ class DMN():
             elif foundAt > 0:
                 newText += text[at:at + foundAt]
                 at += foundAt
-            (failed, itemValue) = self.sfeel('{}'.format(foundItem))
+            if dotOperator is not None:
+                (failed, itemValue) = self.sfeel('{}'.format(foundItem + dotOperator))
+            else:
+                (failed, itemValue) = self.sfeel('{}'.format(foundItem))
             if failed:
-                self.errors.append("Bad S-FEEL when replacing variable '{}' with value".format(foundItem))
+                if dotOperator is not None:
+                    self.errors.append("Bad S-FEEL when replacing variable '{}' with value".format(foundItem + dotOperator))
+                else:
+                    self.errors.append("Bad S-FEEL when replacing variable '{}' with value".format(foundItem))
             sFeelText = self.value2sfeel(itemValue)
-            replaced.append(self.glossaryItems[item])
+            replaced.append(self.glossaryItems[foundItem])
             newText += sFeelText
             at += foundLen                                          # And skip Variable
         return (replaced, newText)
@@ -4975,7 +5132,7 @@ class DMN():
                         doDecision = False
                         break
             if doDecision:      # Run this Decision Table
-                newData = self.decideTable(table, decisionAnnotations, data, None)
+                newData = self.decideOneTable(table, decisionAnnotations, data, None)
                 if newData is None:
                     break
                 if isinstance(newData, list):
@@ -4992,9 +5149,185 @@ class DMN():
             return (status, self.allResults)
 
 
-    def decideTable(self, table, decisionAnnotations, data, parentPolicy):
+
+    def decideTables(self, data, listOfTables):
+        """
+        Make a decision based on a subset of decision tables
+
+        This routine runs the passed data through the loaded DMN rules for the specified decision tables and returns the decision
+
+        Args:
+            param1 (dict): The dictionary of data about which a decision is being made.
+
+                - Each key in 'data' must match a 'Variable' in the Glossary or a 'Business Concept'
+                  [If key is a 'Business Concept' then the value must be dictionay (or a list of dictionaries) where, for each key in the dictionary
+                   the construct of 'Business Concept'.key must match a 'Variable' in the Glossary]
+                - the matching 'Variable' in the Glossary will be set to the matching value for this key from the 'data' dictionary.
+                - Any entry in the Glossary which does not have a key in the 'data' dictionary will be set to the value 'None'.
+                - The values associated with each 'Variable' in the Glossary
+                  will be the input values, for the input columns, in the first DMN rules table in the 'Decision'.
+                - There after, the input values, for the intput columns, in subsequent DMN rules tables will come from 'data',
+                  unless those input 'Variables' are also output 'Variables' in a preceeding, executed, DMN rules table.
+                  In which case, those output values will be used as the input values for the current DMN rules table.
+
+            param2 (list): The list of decision tables to be executed, in list order
+
+                - Each list entry must match a defined decision table
+
+        Returns:
+            tuple: (status, newData)
+
+            status is a dictionary of different status information.
+                Currently only status['error'] is implemented.
+                If the key 'error' is present in the status dictionary,
+                then decide() encountered one or more errors and status['error'] is the list of those errors
+
+            newData
+
+            * for a Single Hit Policy, single DMN rules table executed, newData will be a decision dictionary of the decision.
+
+            * for a Multi Hit Policy DMN rules table, newData will be a list of decison dictionaries; one for each matched rule.
+
+            * if more than one DMN rules table is selected and executed, newData will be a list of decison dictionaries
+
+            The keys to each decision dictionary are
+                - 'Result' - for a Single Hit Policy DMN rules table, this will be a  dictionary where all the keys will be 'Variables'
+                  from the Glossary and the matching the value will be the value of that 'Variable' after the decision was made.
+                  For a Multi Hit Policy DMN rules table this will be a list of decision dictionaries, one for each matched rule.
+
+                - 'Executed Rule' - for a Single Hit Policy DMN rules table this will be
+                  a tuple of the Decision Table Description ('Decisions' from the 'Decision' table),
+                  the DMN rules table name ('Execute Decision Table' from the 'Decision' table)
+                  and the Rule number for the rule that matched in that DMN rules Table.
+                  For a Multi Hit Policy DMN rules table this will be the a list of tuples,
+                  being the Decision Table Description, DMN rules table name and matched Rule number for each matching rule.
+
+                - 'DecisionAnnotations'(optional) - list of tuples (heading, value) of the annotations
+                  from the 'Decision' table named in the 'Executed Rule' tuple.
+
+                - 'RuleAnnotations'(optional) - for a Single Hit Policy DMN rules table, this well be
+                  a list of tuples (heading, value) of the annotations for the matching rule,
+                  if there were any annotations for the matching rule.
+                  For a Multi Hit Policy DMN rules table this will be a list of the lists of any annotations for each matching rule,
+                  where an empty list means that the associated matching rule had no annotations.
+
+            If, whilst making the decision, the decide() function selects and executes more than one the DMN decision rules table
+            then the structure of the returned 'newData' will be a list of decision dictionaries, with each containing
+            the keys 'Result', 'Executed Rule', 'DecisionAnnotations'(optional) and 'RuleAnnotations'(optional),
+            being one list entry for each DMN rules table used whilst making the decision.
+            The final enty in this list is the final decision.
+            All other entries are the intermediate states involved in making the final decision.
+
+        """
+
+        self.errors = []
+        if not self.isLoaded:
+            self.errors.append('No rulesBook has been loaded')
+            status = {}
+            status['errors'] = self.errors
+            self.errors = []
+            return (status, {})
+        if not isinstance(listOfTables, list):
+            self.errors.append('Missing list of Decision Tables')
+            status = {}
+            status['errors'] = self.errors
+            self.errors = []
+            return (status, {})
+        for table in listOfTables:
+            if table not in self.decisionTables:
+                self.errors.append('Invalid Decision Table - ' + table)
+                status = {}
+                status['errors'] = self.errors
+                self.errors = []
+                return (status, {})
+        self.initGlossary()
+        validData = True
+        for variable in data:
+            value = data[variable]
+            if variable in self.glossary:
+                item = self.glossary[variable]['item']
+            elif variable in self.glossaryConcepts:
+                if isinstance(value, dict):
+                    for item in value:
+                        thisItem = variable + '.' + item
+                        thisItem = re.sub(self.badFEELchars, '', thisItem.replace(' ', '_'))
+                        if thisItem not in self.glossaryConcepts[variable]:
+                            self.errors.append('Attribute ({!s}) not in Glossary Business Concept ({!s})'.format(item, variable))
+                            status = {}
+                            status['errors'] = self.errors
+                            self.errors = []
+                            return (status, {})
+                elif isinstance(value, list):
+                    for i in range(len(value)):
+                        if not isinstance(value[i], dict):
+                            self.errors.append('Missing attributes for Glossary Business Concept ({!s})'.format(variable))
+                            status = {}
+                            status['errors'] = self.errors
+                            self.errors = []
+                            return (status, {})
+                        for item in value[i]:
+                            thisItem = variable + '.' + item
+                            thisItem = re.sub(self.badFEELchars, '', thisItem.replace(' ', '_'))
+                            if thisItem not in self.glossaryConcepts[variable]:
+                                self.errors.append('Attribute ({!s}) not in Glossary Business Concept ({!s})'.format(item, variable))
+                                status = {}
+                                status['errors'] = self.errors
+                                self.errors = []
+                                return (status, {})
+                item = variable
+            else:
+                self.errors.append('variable ({!s}) not in Glossary'.format(variable))
+                status = {}
+                status['errors'] = self.errors
+                self.errors = []
+                return (status, {})
+            # Convert the passed Python data to it's FEEL equivalent and store, as a value, in pySFeel
+            sFeelValue = self.value2sfeel(value)
+            if sFeelValue is None:
+                validData = False
+            else:
+                # Store the value of this FEEL text in pySFeel (for possible later pySFeel manipulation)
+                (failed, retVal) = self.sfeel('{} <- {}'.format(item, sFeelValue))
+                if failed:
+                    self.errors.append("Bad S-FEEL when storing value '{} <- {}'".format(item, sFeelValue))
+        if not validData:
+            self.errors.append("Input variable '{!s}' has is invalid S-FEEL value '{!s}'".format(variable, data[variable]))
+            status = {}
+            status['errors'] = self.errors
+            self.errors = []
+            return (status, {})
+
+        # Initialize the status so we can detect circular references
+        for table in self.decisionTables:
+            self.decisionTables[table]['status'] = 'idle'
+            self.decisionTables[table]['recursionCount'] = 0
+
+        # Process each decision table in order
+        self.allResults = []
+        for thisTable in listOfTables:
+            for (table, thisDecision, inputTests, decisionAnnotations) in self.decisions:
+                if table != thisTable:
+                    continue
+                newData = self.decideOneTable(table, decisionAnnotations, data, None)
+                if newData is None:
+                    break
+                if isinstance(newData, list):
+                    self.allResults += newData
+                else:
+                    self.allResults.append(newData)
+        status = {}
+        if len(self.errors) > 0:
+            status['errors'] = self.errors
+            self.errors = []
+        if len(self.allResults) == 1:
+            return (status, self.allResults[0])
+        else:
+            return (status, self.allResults)
+
+
+    def decideOneTable(self, table, decisionAnnotations, data, parentPolicy):
         # Use Decision Table 'table' to make a decision
-        # print('decideTable', table, decisionAnnotations, data, parentPolicy)
+        # print('decideOneTable', table, decisionAnnotations, data, parentPolicy)
 
         # Check for circular references, or decision that have already been made
         if self.decisionTables[table]['status'] == 'being processed':
@@ -5042,35 +5375,34 @@ class DMN():
                 item = self.glossary[variable]['item']
                 (testValidity, validityIsFixed, validityFixedValue) = self.decisionTables[table]['inputValidity'][inputIndex]
                 if testValidity is not None:        # There is a validity test for this input variable
-                    failed = False
-                    if validityIsFixed and (variable in data):             # The input (Python data) must match a fixed value
-                        if data[variable] != validityFixedValue:           # The Python data does not match the fixed valid value
-                            failed = True
+                    (failed, testInput) = self.sfeel('{}'.format(item))
+                    if failed:
+                        self.errors.append("Bad S-FEEL when fetching value for item '{!s}' when testing input validity for variable '{!s}' in table '{!s}'".format(item, variable, table))
+                        self.decisionTables[table]['status'] = 'done'
+                        self.decisionTables[table]['recursionCount'] = 0
+                        return None
+                    if validityIsFixed:             # The input (Python data) must match a fixed value
+                        if testInput != validityFixedValue:           # The Python data does not match the fixed valid value
+                            retVal = False
                         else:
-                            retval = True
+                            retVal = True
                     else:
                         (failed, retVal) = self.sfeel('{}'.format(testValidity))        # Execute the input validity test of variable as S-FEEL
-                    if not validityIsFixed and failed:          # Report the bad S-FEEL
-                        self.errors.append("Bad S-FEEL for validity '{}' for item '{!s}' in table '{!s}' for rule '{!s}' at '{!s}' on sheet '{!s}'".format(testValidity, item, table, thisRule, coordinate, sheet))
+                    if failed:          # Report the bad S-FEEL
+                        if sheet is None:
+                            self.errors.append("Bad S-FEEL for validity '{}' for item '{!s}' in table '{!s}' for rule '{!s}'".format(testValidity, item, table, thisRule))
+                        else:
+                            self.errors.append("Bad S-FEEL for validity '{}' for item '{!s}' in table '{!s}' for rule '{!s}' at '{!s}' on sheet '{!s}'".format(testValidity, item, table, thisRule, coordinate, sheet))
                         self.decisionTables[table]['status'] = 'done'
                         self.decisionTables[table]['recursionCount'] = 0
                         return None
                     if not retVal:          # The S-FEEL returned False
-                        if isFixed and (variable in data):             # For this rule, the input must match a fixed value
-                            value = data[variable]
-                        else:
-                            (failed, value) = self.sfeel(item)         # Get the value from the Glossary
-                            if not validityIsFixed and failed:
-                                if sheet is None:
-                                    self.errors.append("Bad S-FEEL for item '{!s}' in table '{!s}' for rule '{!s}'".format(item, table, thisRule))
-                                else:
-                                    self.errors.append("Bad S-FEEL for item '{!s}' in table '{!s}' for rule '{!s}' at '{!s}' on sheet '{!s}'".format(item, table, thisRule, coordinate, sheet))
                         if sheet is None:
                             message = "Variable {!s} has S-FEEL input value '{!s}' which does not match input validity list '{!s}' for decision table '{!s}'"
-                            self.errors.append(message.format(item, repr(value), testValidity, table))
+                            self.errors.append(message.format(item, repr(testInput), testValidity, table))
                         else:
                             message = "Variable {!s} has S-FEEL input value '{!s}' which does not match input validity list '{!s}' for decision table '{!s}' at '{!s}' on sheet '{!s}'"
-                            self.errors.append(message.format(item, repr(value), testValidity, table, coordinate, sheet))
+                            self.errors.append(message.format(item, repr(testInput), testValidity, table, coordinate, sheet))
                         self.decisionTables[table]['status'] = 'done'
                         self.decisionTables[table]['recursionCount'] = 0
                         return None
@@ -5085,11 +5417,21 @@ class DMN():
                         retVal = True
                 else:
                     (failed, retVal) = self.sfeel(str(test))
-                if not isFixed and failed:
-                    self.errors.append("Bad S-FEEL when when testing validity '{}' for item '{!s}' in table '{!s}' for rule '{!s}'".format(str(test), item, table, thisRule))
-                    self.decisionTables[table]['status'] = 'done'
-                    self.decisionTables[table]['recursionCount'] = 0
-                    return None
+                if not isFixed:
+                    if failed:
+                        self.errors.append("Bad S-FEEL when when testing '{}' for item '{!s}' in table '{!s}' for rule '{!s}'".format(str(test), item, table, thisRule))
+                        self.decisionTables[table]['status'] = 'done'
+                        self.decisionTables[table]['recursionCount'] = 0
+                        return None
+                    if not retVal:
+                        if test.startswith(self.glossary[variable]['item']):    # Check if the rest of the test is a list
+                            restOfTest = test[len(self.glossary[variable]['item']):].strip()               # And if that's a list, try variable in restOfTest
+                            if restOfTest.startswith('='):
+                                (failed, newRetVal) = self.sfeel(str(restOfTest[1:]))
+                                if not failed and isinstance(newRetVal, list):
+                                    (failed, retVal) = self.sfeel(str(self.glossary[variable]['item'] + ' in ' + restOfTest[1:]))
+                                    if failed:
+                                        retVal = False
                 if not retVal:
                     # print('failed')
                     break
@@ -5178,7 +5520,7 @@ class DMN():
                 item = self.glossary[variable]['item']
                 (failed, retVal) = self.sfeel('{} <- {}'.format(item, result))
                 if failed:
-                    self.errors.append("Bad S-FEEL assigning value to variable '{} <- {}' for assembling 'Result' for table '{!s}'".format(item, result, table))
+                    self.errors.append("Bad S-FEEL assigning value to variable '{} <- {}' when assembling 'Result' for table '{!s}'".format(item, result, table))
                     self.decisionTables[table]['status'] = 'done'
                     self.decisionTables[table]['recursionCount'] = 0
                     return None
@@ -5222,7 +5564,11 @@ class DMN():
             foundRule = ranks[highestRank][0]
             for i in range(len(self.rules[table][foundRule]['outputs'])):
                 (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][foundRule]['outputs'][i]
-                # result is a string of valid FEEL tokens, but may be a valid expression
+                # try:
+                #     print("Result: table '{!s}', rule '{!s}', variable '{!s}', result '{!s}' ({!s}/{!s})".format(table, foundRule, variable, result, isFixed, fixedValue))
+                # except:
+                #     print("Result: table '{!s}', rule '{!s}', variable '{!s}', result '{!s}' ({!s}/{!s})".format(table, foundRule, variable, result.encode('utf-8', errors='ignore'), isFixed, fixedValue.encode('utf=8', errors='ignore')))
+                # result is a string of valid FEEL tokens, but may be an invalid expression
                 if not isFixed:
                     (replaced, result) = self.replaceItems(result)      # Replace BusinessConcept.Attribute references with actual values
                     sfeelText = self.data2sfeel(None, None, result, True)           # See if this is valid S-FEEL
@@ -5252,7 +5598,7 @@ class DMN():
                                 name = self.decisionTables[table]['annotation'][annotation]
                                 text = self.rules[table][foundRule]['annotation'][annotation]
                                 childDecisionAnnotations.append((name, text))
-                        childData = self.decideTable(childTable, childDecisionAnnotations, data, thisHitPolicy)
+                        childData = self.decideOneTable(childTable, childDecisionAnnotations, data, thisHitPolicy)
                         if childData is not None:
                             self.allResults.append(childData)
                         else:
@@ -5290,7 +5636,7 @@ class DMN():
                 item = self.glossary[variable]['item']
                 (failed, retVal) = self.sfeel('{} <- {}'.format(item, result))
                 if failed:
-                    self.errors.append("Bad S-FEEL assigning value to variable '{} <- {}' for assembling 'Result' for table '{!s}'".format(item, result, table))
+                    self.errors.append("Bad S-FEEL assigning value to variable '{} <- {}' when assembling 'Result' for table '{!s}'".format(item, result, table))
                     self.decisionTables[table]['status'] = 'done'
                     self.decisionTables[table]['recursionCount'] = 0
                     return None
@@ -5345,6 +5691,7 @@ class DMN():
                     for k in range(len(self.rules[table][foundRule]['outputs'])):
                         (variable, result, outputIndex, rank, isFixed, fixedValue, coordinate, sheet) = self.rules[table][foundRule]['outputs'][k]
                         # result is a string of valid FEEL tokens, but may be a valid expression
+                        # print("Result: table '{!s}', rule '{!s}', variable '{!s}', result '{!s}'".format(table, foundRule, variable, result))
                         if not isFixed:
                             (replaced, result) = self.replaceItems(result)      # Replace BusinessConcept.Attribute references with actual values
                             sfeelText = self.data2sfeel(None, None, result, True)           # See if this is valid S-FEEL
@@ -5374,7 +5721,7 @@ class DMN():
                                         name = self.decisionTables[table]['annotation'][annotation]
                                         text = self.rules[table][foundRule]['annotation'][annotation]
                                         childDecisionAnnotations.append((name, text))
-                                childData = self.decideTable(childTable, childDecisionAnnotations, data, True)
+                                childData = self.decideOneTable(childTable, childDecisionAnnotations, data, True)
                                 if childData is not None:
                                     self.allResults.append(childData)
                                 else:
@@ -5412,7 +5759,7 @@ class DMN():
                             if len(thisHitPolicy) == 1:
                                 newData['Result'][variable] = []
                             elif thisHitPolicy[1] in ['+', '#']:
-                                newData['Result'][variable] = 0
+                                newData['Result'][variable] = 0.0
                             else:
                                 newData['Result'][variable] = None
                         item = self.glossary[variable]['item']
@@ -5490,8 +5837,7 @@ class DMN():
                             elif thisOutput > newData['Result'][variable]:
                                 newData['Result'][variable] = thisOutput
                         else:
-                            newData['Result'][variable] += 1
-                        # print('Setting returned value for', variable, 'to', str(newData['Result'][variable]), 'in Decision Table', "'{!s}'".format(table))
+                            newData['Result'][variable] += 1.0
                         first = False   # Done every output variable once
                         ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
                         if 'annotation' in self.decisionTables[table]:
@@ -5508,6 +5854,9 @@ class DMN():
                             newData['RuleAnnotations'].append(annotations)
                         else:
                             newData['RuleAnnotations'].append([])
+            for variable in newData['Result']:
+                # print('Setting returned value for', variable, 'to', str(newData['Result'][variable]), 'in Decision Table', "'{!s}'".format(table))
+                pass
         self.decisionTables[table]['status'] = 'done'
         self.decisionTables[table]['recursionCount'] = 0
         return newData

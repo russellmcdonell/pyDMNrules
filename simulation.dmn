@@ -113,7 +113,7 @@
 			<rule id="row-884555325-1">
 				<description>Default value</description>
 				<inputEntry id="UnaryTests_0cy7usy">
-					<text>not("Fall", "Winter", "Spring", "Summer")</text>
+					<text>not in("Fall", "Winter", "Spring", "Summer")</text>
 				</inputEntry>
 				<inputEntry id="UnaryTests_0ww352f">
 					<text>&gt;= 0</text>
