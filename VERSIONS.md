@@ -1,3 +1,6 @@
+### 1.4.1 - Bug fix release - released to PyPI
+ - Fixed bug triggered by initalizing output values in a multi-decision table decision
+ - Added getTableGlossary() for DecisionCentral
 ### 1.4.0 - BREAKING Bug fix release - released to PyPI
  - pySFeel changed parsing so that ranges with closed intervals are returned with round brackets (reverse facing square brackets are allowed on input, but will be converted to their equivalent round bracket)
    **NOTE BREAKING CHANGE:** this may effect some existing of tests

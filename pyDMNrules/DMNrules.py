@@ -4105,9 +4105,78 @@ class DMN():
                 glossary[concept] = {}
             FEELname = self.glossary[variable]['item']
             (failed, itemValue) = self.sfeel('{}'.format(FEELname))
-            if failed:
-                self.errors.append("Bad S-FEEL when replacing variable '{}' with value".format(FEELname))
-            glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
+            if not failed:
+                glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
+        return glossary
+
+
+    def getTableGlossary(self, table):
+        """
+        Return the Glossary and current values associated with one Decision Table
+
+        This routine returns the Glossary - each Variable, within each Business Concept.
+
+        Args:
+            decisionTableName
+
+        Returns:
+            dict:{keys:Business Concept names, value:dict{keys:Variable names, value:tuple(FEELname, current value, [annotations])}}
+
+        """
+        glossary = {}
+        if not self.isLoaded:
+            return glossary
+        if table not in self.decisionTables:
+            return glossary
+        if 'inputColumns' in self.decisionTables[table]:
+            for i in range(len(self.decisionTables[table]['inputColumns'])):
+                variable = self.decisionTables[table]['inputColumns'][i]['name']
+                concept = self.glossary[variable]['concept']
+                if concept not in glossary:
+                    glossary[concept] = {}
+                FEELname = self.glossary[variable]['item']
+                (failed, itemValue) = self.sfeel('{}'.format(FEELname))
+                if not failed:
+                    glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
+        if 'inputColumns' in self.decisionTables[table]:
+            for i in range(len(self.decisionTables[table]['outputColumns'])):
+                variable = self.decisionTables[table]['inputColumns'][i]['name']
+                concept = self.glossary[variable]['concept']
+                if concept not in glossary:
+                    glossary[concept] = {}
+                FEELname = self.glossary[variable]['item']
+                (failed, itemValue) = self.sfeel('{}'.format(FEELname))
+                if not failed:
+                    glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
+        if 'inputRows' in self.decisionTables[table]:
+            for i in range(len(self.decisionTables[table]['inputRows'])):
+                variable = self.decisionTables[table]['inputRows'][i]['name']
+                concept = self.glossary[variable]['concept']
+                if concept not in glossary:
+                    glossary[concept] = {}
+                FEELname = self.glossary[variable]['item']
+                (failed, itemValue) = self.sfeel('{}'.format(FEELname))
+                if not failed:
+                    glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
+        if 'inputRows' in self.decisionTables[table]:
+            for i in range(len(self.decisionTables[table]['outputRows'])):
+                variable = self.decisionTables[table]['inputRows'][i]['name']
+                concept = self.glossary[variable]['concept']
+                if concept not in glossary:
+                    glossary[concept] = {}
+                FEELname = self.glossary[variable]['item']
+                (failed, itemValue) = self.sfeel('{}'.format(FEELname))
+                if not failed:
+                    glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
+        if 'output' in self.decisionTables[table]:
+            variable = self.decisionTables[table]['output']['name']
+            concept = self.glossary[variable]['concept']
+            if concept not in glossary:
+                glossary[concept] = {}
+            FEELname = self.glossary[variable]['item']
+            (failed, itemValue) = self.sfeel('{}'.format(FEELname))
+            if not failed:
+                glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
         return glossary
 
 
@@ -5114,12 +5183,13 @@ class DMN():
 
         # Process each decision table in order
         self.allResults = []
+        first = True
         for (table, thisDecision, inputTests, decisionAnnotations) in self.decisions:
             doDecision = True
             if len(inputTests) > 0:
                 for (variable, test, isFixed, fixedValue) in inputTests:
                     failed = False
-                    if isFixed and (variable in data):     # The input value must match this fixed value
+                    if isFixed and first and (variable in data):     # The input value must match this fixed value
                         if fixedValue == data[variable]:
                             retVal = True
                         else:
@@ -5132,13 +5202,14 @@ class DMN():
                         doDecision = False
                         break
             if doDecision:      # Run this Decision Table
-                newData = self.decideOneTable(table, decisionAnnotations, data, None)
+                newData = self.decideOneTable(table, decisionAnnotations, None)
                 if newData is None:
                     break
                 if isinstance(newData, list):
                     self.allResults += newData
                 else:
                     self.allResults.append(newData)
+                first = False
         status = {}
         if len(self.errors) > 0:
             status['errors'] = self.errors
@@ -5308,7 +5379,7 @@ class DMN():
             for (table, thisDecision, inputTests, decisionAnnotations) in self.decisions:
                 if table != thisTable:
                     continue
-                newData = self.decideOneTable(table, decisionAnnotations, data, None)
+                newData = self.decideOneTable(table, decisionAnnotations, None)
                 if newData is None:
                     break
                 if isinstance(newData, list):
@@ -5325,9 +5396,9 @@ class DMN():
             return (status, self.allResults)
 
 
-    def decideOneTable(self, table, decisionAnnotations, data, parentPolicy):
+    def decideOneTable(self, table, decisionAnnotations, parentPolicy):
         # Use Decision Table 'table' to make a decision
-        # print('decideOneTable', table, decisionAnnotations, data, parentPolicy)
+        # print('decideOneTable', table, decisionAnnotations, parentPolicy)
 
         # Check for circular references, or decision that have already been made
         if self.decisionTables[table]['status'] == 'being processed':
@@ -5406,17 +5477,8 @@ class DMN():
                         self.decisionTables[table]['status'] = 'done'
                         self.decisionTables[table]['recursionCount'] = 0
                         return None
-                # print('testing:', table, variable, test, item, isFixed, fixedValue, data)
-                failed = False
-                if isFixed and (variable in data):             # For this rule, the input must match a fixed value
-                    value = data[variable]
-                    if value != fixedValue:
-                        failed = True
-                        retVal = False
-                    else:
-                        retVal = True
-                else:
-                    (failed, retVal) = self.sfeel(str(test))
+                # print('testing:', table, variable, test, item, isFixed, fixedValue)
+                (failed, retVal) = self.sfeel(str(test))
                 if not isFixed:
                     if failed:
                         self.errors.append("Bad S-FEEL when when testing '{}' for item '{!s}' in table '{!s}' for rule '{!s}'".format(str(test), item, table, thisRule))
@@ -5598,7 +5660,7 @@ class DMN():
                                 name = self.decisionTables[table]['annotation'][annotation]
                                 text = self.rules[table][foundRule]['annotation'][annotation]
                                 childDecisionAnnotations.append((name, text))
-                        childData = self.decideOneTable(childTable, childDecisionAnnotations, data, thisHitPolicy)
+                        childData = self.decideOneTable(childTable, childDecisionAnnotations, thisHitPolicy)
                         if childData is not None:
                             self.allResults.append(childData)
                         else:
@@ -5721,7 +5783,7 @@ class DMN():
                                         name = self.decisionTables[table]['annotation'][annotation]
                                         text = self.rules[table][foundRule]['annotation'][annotation]
                                         childDecisionAnnotations.append((name, text))
-                                childData = self.decideOneTable(childTable, childDecisionAnnotations, data, True)
+                                childData = self.decideOneTable(childTable, childDecisionAnnotations, thisHitPolicy)
                                 if childData is not None:
                                     self.allResults.append(childData)
                                 else:
