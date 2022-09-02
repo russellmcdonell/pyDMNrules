@@ -496,6 +496,9 @@ class DMN():
                 return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
             else:
                 return self.data2sfeel(coordinate, sheet, thisTest, False)
+        match = re.match(r'^contains\((.*)\)$', thisTest)
+        if not wasString and match is not None:      # if variable is a string, then check that it contains this substring
+            return self.data2sfeel(coordinate, sheet, 'contains(' + variable + ', "' + match.group(1) + '")', False)
         match = re.match(r'^list contains\((.*)\)$', thisTest)
         if not wasString and match is not None:           # if variable is a list, then check that it contains this element
             return self.data2sfeel(coordinate, sheet, 'list contains(' + variable + ', ' + match.group(1) + ')', False)
