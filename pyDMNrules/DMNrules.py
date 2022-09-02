@@ -6351,10 +6351,10 @@ class DMN():
                    dataAnnotations.append(testData[concept]['annotation'][thisIndex - 1])
             results[thisTest]['data'] = data
             (status, newData) = self.decide(data)
-            if isinstance(newData, list):
-                newData = newData[-1]
             results[thisTest]['newData'] = newData
             results[thisTest]['status'] = status
+            if isinstance(newData, list):
+                newData = newData[-1]
             if len(dataAnnotations) > 0:
                 results[thisTest]['DataAnnotations'] = dataAnnotations
             testStatus.append(status)
