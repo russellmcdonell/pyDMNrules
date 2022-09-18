@@ -1,12 +1,9 @@
-### 1.4.3 - Minor bug fix and features release - released to PyPI
+### 1.4.2 - Minor bug fix and features release - released to PyPI
  - Added support for the contains() function - thanks Leonard Budney (https://github.com/budney)
  - Fixed bug in getTableGlossary() - output rows/columns weren't being output
  - Fixed bug in replaceItems() - incorrect replacement for . operators
  - Fixed bugs when a Decision Table was embedded in a Collection type Decision Table
  - Made test() return all the Results, Decisions and Excuted Rules - thanks Leonard Budney (https://github.com/budney)
-### 1.4.2 - Added support for contains() function - to be released to PyPI
- - Added support for contains() function - thank you budney (https://github.com/budney)
- - Fixed typo in getTableGlossary()
  - Fixed .hour, .minute and .second - now returns float()
  ### 1.4.1 - Bug fix release - released to PyPI
  - Fixed bug triggered by initalizing output values in a multi-decision table decision
