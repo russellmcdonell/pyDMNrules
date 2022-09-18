@@ -73,39 +73,80 @@ class TestClass:
         assert len(results) == 3
         assert 'Mismatches' not in results[0]
         assert 'newData' in results[0]
-        assert 'Result' in results[0]['newData']
-        assert 'Encounter Diagnosis' in results[0]['newData']['Result']
-        assert results[0]['newData']['Result']['Encounter Diagnosis'] == 'Acute Sinusitis'
-        assert 'Recommended Medication' in results[0]['newData']['Result']
-        assert results[0]['newData']['Result']['Recommended Medication'] == 'Levofloxacin'
-        assert 'Recommended Dose' in results[0]['newData']['Result']
-        assert results[0]['newData']['Result']['Recommended Dose'] == '500mg every 24 hours for 14 days'
-        assert 'Warning' in results[0]['newData']['Result']
-        assert results[0]['newData']['Result']['Warning'] == 'Coumadin and Levofloxacin can result in reduced effectiveness of Coumadin.'
-        assert 'Error Message' in results[0]['newData']['Result']
-        assert results[0]['newData']['Result']['Error Message'] is None
-        assert 'Result' in results[1]['newData']
-        assert 'Encounter Diagnosis' in results[1]['newData']['Result']
-        assert results[1]['newData']['Result']['Encounter Diagnosis'] == 'Acute Sinusitis'
-        assert 'Recommended Medication' in results[1]['newData']['Result']
-        assert results[1]['newData']['Result']['Recommended Medication'] == 'Amoxicillin'
-        assert 'Recommended Dose' in results[1]['newData']['Result']
-        assert results[1]['newData']['Result']['Recommended Dose'] == '250mg every 24 hours for 14 days'
-        assert 'Warning' in results[1]['newData']['Result']
-        assert results[1]['newData']['Result']['Warning'] is None
-        assert 'Error Message' in results[0]['newData']['Result']
-        assert results[1]['newData']['Result']['Error Message'] is None
-        assert 'Result' in results[2]['newData']
-        assert 'Encounter Diagnosis' in results[2]['newData']['Result']
-        assert results[2]['newData']['Result']['Encounter Diagnosis'] == 'Diabetes'
-        assert 'Recommended Medication' in results[2]['newData']['Result']
-        assert results[2]['newData']['Result']['Recommended Medication'] is None
-        assert 'Recommended Dose' in results[2]['newData']['Result']
-        assert results[2]['newData']['Result']['Recommended Dose'] is None
-        assert 'Warning' in results[2]['newData']['Result']
-        assert results[2]['newData']['Result']['Warning'] is None
-        assert 'Error Message' in results[2]['newData']['Result']
-        assert results[2]['newData']['Result']['Error Message'] == 'Sorry, this decision service can handle only Acute Sinusitis'
+        if isinstance(results[0]['newData'], list):
+            assert 'Result' in results[0]['newData'][-1]
+            assert 'Encounter Diagnosis' in results[0]['newData'][-1]['Result']
+            assert results[0]['newData'][-1]['Result']['Encounter Diagnosis'] == 'Acute Sinusitis'
+            assert 'Recommended Medication' in results[0]['newData'][-1]['Result']
+            assert results[0]['newData'][-1]['Result']['Recommended Medication'] == 'Levofloxacin'
+            assert 'Recommended Dose' in results[0]['newData'][-1]['Result']
+            assert results[0]['newData'][-1]['Result']['Recommended Dose'] == '500mg every 24 hours for 14 days'
+            assert 'Warning' in results[0]['newData'][-1]['Result']
+            assert results[0]['newData'][-1]['Result']['Warning'] == 'Coumadin and Levofloxacin can result in reduced effectiveness of Coumadin.'
+            assert 'Error Message' in results[0]['newData'][-1]['Result']
+            assert results[0]['newData'][-1]['Result']['Error Message'] is None
+        else:
+            assert 'Result' in results[0]['newData']
+            assert 'Encounter Diagnosis' in results[0]['newData']['Result']
+            assert results[0]['newData']['Result']['Encounter Diagnosis'] == 'Acute Sinusitis'
+            assert 'Recommended Medication' in results[0]['newData']['Result']
+            assert results[0]['newData']['Result']['Recommended Medication'] == 'Levofloxacin'
+            assert 'Recommended Dose' in results[0]['newData']['Result']
+            assert results[0]['newData']['Result']['Recommended Dose'] == '500mg every 24 hours for 14 days'
+            assert 'Warning' in results[0]['newData']['Result']
+            assert results[0]['newData']['Result']['Warning'] == 'Coumadin and Levofloxacin can result in reduced effectiveness of Coumadin.'
+            assert 'Error Message' in results[0]['newData']['Result']
+            assert results[0]['newData']['Result']['Error Message'] is None
+        assert 'newData' in results[1]
+        if isinstance(results[1]['newData'], list):
+            assert 'Result' in results[1]['newData'][-1]
+            assert 'Encounter Diagnosis' in results[1]['newData'][-1]['Result']
+            assert results[1]['newData'][-1]['Result']['Encounter Diagnosis'] == 'Acute Sinusitis'
+            assert 'Recommended Medication' in results[1]['newData'][-1]['Result']
+            assert results[1]['newData'][-1]['Result']['Recommended Medication'] == 'Amoxicillin'
+            assert 'Recommended Dose' in results[1]['newData'][-1]['Result']
+            assert results[1]['newData'][-1]['Result']['Recommended Dose'] == '250mg every 24 hours for 14 days'
+            assert 'Warning' in results[1]['newData'][-1]['Result']
+            assert results[1]['newData'][-1]['Result']['Warning'] is None
+            assert 'Error Message' in results[1]['newData'][-1]['Result']
+            assert results[1]['newData'][-1]['Result']['Error Message'] is None
+        else:
+            assert 'Result' in results[1]['newData']
+            assert 'Encounter Diagnosis' in results[1]['newData']['Result']
+            assert results[1]['newData']['Result']['Encounter Diagnosis'] == 'Acute Sinusitis'
+            assert 'Recommended Medication' in results[1]['newData']['Result']
+            assert results[1]['newData']['Result']['Recommended Medication'] == 'Amoxicillin'
+            assert 'Recommended Dose' in results[1]['newData']['Result']
+            assert results[1]['newData']['Result']['Recommended Dose'] == '250mg every 24 hours for 14 days'
+            assert 'Warning' in results[1]['newData']['Result']
+            assert results[1]['newData']['Result']['Warning'] is None
+            assert 'Error Message' in results[0]['newData']['Result']
+            assert results[1]['newData']['Result']['Error Message'] is None
+        assert 'newData' in results[2]
+        if isinstance(results[2]['newData'], list):
+            assert 'Result' in results[2]['newData'][-1]
+            assert 'Encounter Diagnosis' in results[2]['newData'][-1]['Result']
+            assert results[2]['newData'][-1]['Result']['Encounter Diagnosis'] == 'Diabetes'
+            assert 'Recommended Medication' in results[2]['newData'][-1]['Result']
+            assert results[2]['newData'][-1]['Result']['Recommended Medication'] is None
+            assert 'Recommended Dose' in results[2]['newData'][-1]['Result']
+            assert results[2]['newData'][-1]['Result']['Recommended Dose'] is None
+            assert 'Warning' in results[2]['newData'][-1]['Result']
+            assert results[2]['newData'][-1]['Result']['Warning'] is None
+            assert 'Error Message' in results[2]['newData'][-1]['Result']
+            assert results[2]['newData'][-1]['Result']['Error Message'] == 'Sorry, this decision service can handle only Acute Sinusitis'
+        else:
+            assert 'Result' in results[2]['newData']
+            assert 'Encounter Diagnosis' in results[2]['newData']['Result']
+            assert results[2]['newData']['Result']['Encounter Diagnosis'] == 'Diabetes'
+            assert 'Recommended Medication' in results[2]['newData']['Result']
+            assert results[2]['newData']['Result']['Recommended Medication'] is None
+            assert 'Recommended Dose' in results[2]['newData']['Result']
+            assert results[2]['newData']['Result']['Recommended Dose'] is None
+            assert 'Warning' in results[2]['newData']['Result']
+            assert results[2]['newData']['Result']['Warning'] is None
+            assert 'Error Message' in results[2]['newData']['Result']
+            assert results[2]['newData']['Result']['Error Message'] == 'Sorry, this decision service can handle only Acute Sinusitis'
  
     def test_Example1(self):
         '''

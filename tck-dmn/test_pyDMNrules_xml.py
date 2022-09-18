@@ -52,6 +52,13 @@ brief = False
 dictionary_outputs = ['0013-sort', '0069-feel-list', '0083-feel-unicode',     # Some tests expect dictionaries as outputs
                       '0057-feel-context', '0081-feel-getentries-function']
 
+fullTests = ['0007-date-time', '0008-listGen', '0100-feel-constants', '0106-feel-ternary-logic',      # Some tests require previous decision outputs as inputs to subsequent decisions
+             '0004-lending', '0009-append-flatten',
+             '0010-concatenate','0012-list-functions', '0016-some-every', '0011-insert-remove', '0013-sort', '0014-loan-comparison',
+             '0020-vacation-days', '0021-singleton-list','0035-test-structure-output', '0036-dt-variable-input']
+
+
+
 # This next section is plagurised from /usr/include/sysexits.h
 EX_OK = 0        # successful termination
 EX_WARN = 1        # non-fatal termination with warnings
@@ -407,7 +414,6 @@ def collectTests():
                 testNames.append(test.get('id'))
         else:
             testNames.append(str(testNum))
-        decisionNames.append([])
         testNum += 1
         data = {}       # The variable/value pairs
         for inputNode in test.findall(testRootPrefix + 'inputNode', testNs):
@@ -459,7 +465,7 @@ def collectTests():
         result = {}
         for resultNode in test.findall(testRootPrefix + 'resultNode', testNs):
             decisionName = resultNode.get('name')
-            decisionNames[-1].append(decisionName)
+            decisionNames.append(decisionName)
             expected = resultNode.find(testRootPrefix + 'expected', testNs)
             value = expected.find(testRootPrefix + 'value', testNs)
             listElement = expected.find(testRootPrefix + 'list', testNs)
@@ -782,7 +788,7 @@ Then process the file, named in the command line
         if not brief:
             print('Testing Conformance Level', conformanceLevel)
         patterns = glob.glob(tckDir + '/tck-master/TestCases/compliance-level-' + conformanceLevel + '/[0-9]*')
-        # patterns = glob.glob(tckDir + '/tck-master/TestCases/compliance-level-' + conformanceLevel + '/1130*')
+        # patterns = glob.glob(tckDir + '/tck-master/TestCases/compliance-level-' + conformanceLevel + '/001*')
         logging.info('Testing Conformance Level %s', conformanceLevel)
         for pattern in patterns:
             badDMN = False
@@ -849,11 +855,10 @@ Then process the file, named in the command line
                         print('{}\t{}\t{}\tfailed\tBad DMN file'.format(conformanceLevel, thisPattern, testNames[i]))
                         failed = True
                         continue
-                    if thisPattern in ['0007-date-time', '0008-listGen',         # Some tests require previous decision outputs as inputs to subsequent decisions
-                                       '0012-list-functions', '0016-some-every', '0020-vacation-days', '0035-test-structure-output']:
+                    if thisPattern in fullTests:         # Some tests require previous decision outputs as inputs to subsequent decisions
                         (status, newData) = dmnRules.decide(data)
                     else:
-                        (status, newData) = dmnRules.decideTables(data, decisionNames[i])
+                        (status, newData) = dmnRules.decideTables(data, [decisionNames[i]])
                     if 'errors' in status:
                         if not brief:
                             try:
@@ -908,15 +913,28 @@ Then process the file, named in the command line
                         if isinstance(newData[resultNum]['Executed Rule'], list):
                             for j in range(len(newData[resultNum]['Executed Rule'])):
                                 (thisDecision, thisTable, thisRule) = newData[resultNum]['Executed Rule'][j]
-                                if thisTable in decisionNames[i]:
-                                    foundResults.append(thisTable)
+                                if thisPattern in fullTests:         # Some tests require previous decision outputs as inputs to subsequent decisions
+                                    if thisTable in decisionNames:
+                                        foundResults.append(thisTable)
+                                else:
+                                    if thisTable in decisionNames[i]:
+                                        foundResults.append(thisTable)
                         else:
                             (thisDecision, thisTable, thisRule) = newData[resultNum]['Executed Rule']
-                            if thisTable in decisionNames[i]:
-                                foundResults.append(thisTable)
-                    missing = set(decisionNames[i]).difference(set(foundResults))
+                            if thisPattern in fullTests:         # Some tests require previous decision outputs as inputs to subsequent decisions
+                                if thisTable in decisionNames:
+                                    foundResults.append(thisTable)
+                            else:
+                                if thisTable in decisionNames[i]:
+                                    foundResults.append(thisTable)
+                    if thisPattern in fullTests:         # Some tests require previous decision outputs as inputs to subsequent decisions
+                        missing = set(decisionNames).difference(set(foundResults))
+                    else:
+                        missing = set([decisionNames[i]]).difference(set(foundResults))
                     if len(missing) > 0:
                         print('{}\t{}\t{}\tfailed\tMissing results for Decision Tables {}'.format(conformanceLevel, thisPattern, testNames[i], missing))
+                        logging.info('{}\t{}\t{}\tfailed\tMissing results for Decision Tables {}'.format(conformanceLevel, thisPattern, testNames[i], missing))
+                        logging.info('foundResults: %s, i: %s, decisionName[i]: %s', foundResults, i,  decisionNames[i])
                         failed = True
                         continue
                     for variable in results[i]:         # Check each variable
@@ -954,7 +972,8 @@ Then process the file, named in the command line
                                     break
                                 if isinstance(thisValue, float):
                                     thisValue = int(thisValue * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
-                                    newData[thisResult]['Result'][variable][j] = int(float(newData[thisResult]['Result'][variable][j]) * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
+                                    if isinstance(newData[thisResult]['Result'][variable][j], float) or isinstance(newData[thisResult]['Result'][variable][j], int):
+                                        newData[thisResult]['Result'][variable][j] = int(float(newData[thisResult]['Result'][variable][j]) * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
                                 if newData[thisResult]['Result'][variable][j] != thisValue:
                                     if not brief:
                                         print('Test:', testNames[i], 'failed - returned value', newData[thisResult]['Result'][variable], 'for', variable, 'when', value, 'expected')
@@ -1033,7 +1052,8 @@ Then process the file, named in the command line
                                             break
                                         if isinstance(thisOneValue, float):
                                             thisOneValue = int(thisOneValue * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
-                                            newData[thisResult]['Result'][thisVariable][j] = int(float(newData[thisResult]['Result'][thisVariable][j]) * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
+                                            if isinstance(newData[thisResult]['Result'][thisVariable][j], float) or isinstance(newData[thisResult]['Result'][thisVariable][j], int):
+                                                newData[thisResult]['Result'][thisVariable][j] = int(float(newData[thisResult]['Result'][thisVariable][j]) * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
                                         if newData[thisResult]['Result'][thisVariable][j] != thisOneValue:
                                             if not brief:
                                                 try:
@@ -1055,7 +1075,7 @@ Then process the file, named in the command line
                                 else:           # Just a dictionary item
                                     if isinstance(thisValue, float):
                                         thisValue = int(thisValue * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
-                                        if isinstance(newData[thisResult]['Result'][variable][thisVariable], float):
+                                        if isinstance(newData[thisResult]['Result'][variable][thisVariable], float) or isinstance(newData[thisResult]['Result'][variable][thisVariable], int):
                                             newData[thisResult]['Result'][variable][thisVariable] = int(float(newData[thisResult]['Result'][variable][thisVariable]) * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
                                     if newData[thisResult]['Result'][variable][thisVariable] != thisValue:
                                         if not brief:
@@ -1105,7 +1125,7 @@ Then process the file, named in the command line
                                     break
                             if isinstance(value, float):
                                 value = int(value * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
-                                if isinstance(newData[thisResult]['Result'][variable], float):
+                                if isinstance(newData[thisResult]['Result'][variable], float) or isinstance(newData[thisResult]['Result'][variable], int):
                                     newData[thisResult]['Result'][variable] = int(float(newData[thisResult]['Result'][variable]) * (10 ** decimalDigits) + 0.5)/(10.0 ** decimalDigits)
                             elif isinstance(value, datetime.time) and isinstance(newData[thisResult]['Result'][variable], datetime.time):       # check for equivalent timezones (thisResult == +23)
                                 resTime = newData[thisResult]['Result'][variable]

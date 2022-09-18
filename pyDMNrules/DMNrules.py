@@ -451,6 +451,29 @@ class DMN():
                 return self.data2sfeel(coordinate, sheet, variable + 'any(' + variable + ')', False)
 
         # Check for the known two parameter FEEL functions that return True or False
+        match = re.match(r'^contains\((.*)\)$', thisTest)
+        if not wasString and match is not None:           # if variable is a string, then check that it starts with this string
+            # Check that there is only a single parameter
+            withString = match.group(1)
+            parameters = []
+            try:
+                for row in csv.reader([withString], dialect=csv.excel, doublequote=False, skipinitialspace=True, escapechar='\\'):
+                    parameters = list(row)
+            except:
+                pass
+            if len(parameters) == 1:
+                if withString[0] != '"':    # make sure the second arguement is a string
+                    withString = '"' + withString
+                if withString[-1] != '"':
+                    withString += '"'
+                if testIsNot:
+                    return self.data2sfeel(coordinate, sheet, 'not(contains(' + variable + ', ' + withString + '))', False)
+                else:
+                    return self.data2sfeel(coordinate, sheet, 'contains(' + variable + ', ' + withString + ')', False)
+            elif testIsNot:
+                return self.data2sfeel(coordinate, sheet, 'not(' + thisTest + ')', False)
+            else:
+                return self.data2sfeel(coordinate, sheet, thisTest, False)
         match = re.match(r'^starts with\((.*)\)$', thisTest)
         if not wasString and match is not None:           # if variable is a string, then check that it starts with this string
             # Check that there is only a single parameter
@@ -4138,9 +4161,9 @@ class DMN():
                 (failed, itemValue) = self.sfeel('{}'.format(FEELname))
                 if not failed:
                     glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
-        if 'inputColumns' in self.decisionTables[table]:
+        if 'outputColumns' in self.decisionTables[table]:
             for i in range(len(self.decisionTables[table]['outputColumns'])):
-                variable = self.decisionTables[table]['inputColumns'][i]['name']
+                variable = self.decisionTables[table]['outputColumns'][i]['name']
                 concept = self.glossary[variable]['concept']
                 if concept not in glossary:
                     glossary[concept] = {}
@@ -4158,9 +4181,9 @@ class DMN():
                 (failed, itemValue) = self.sfeel('{}'.format(FEELname))
                 if not failed:
                     glossary[concept][variable] = (FEELname, itemValue, self.glossary[variable]['annotations'])
-        if 'inputRows' in self.decisionTables[table]:
+        if 'outputRows' in self.decisionTables[table]:
             for i in range(len(self.decisionTables[table]['outputRows'])):
-                variable = self.decisionTables[table]['inputRows'][i]['name']
+                variable = self.decisionTables[table]['outputRows'][i]['name']
                 concept = self.glossary[variable]['concept']
                 if concept not in glossary:
                     glossary[concept] = {}
@@ -4830,7 +4853,7 @@ class DMN():
                 newText += text[at:at + foundAt]
                 at += foundAt
             if dotOperator is not None:
-                (failed, itemValue) = self.sfeel('{}'.format(foundItem + dotOperator))
+                (failed, itemValue) = self.sfeel('({}){}'.format(foundItem, dotOperator))
             else:
                 (failed, itemValue) = self.sfeel('{}'.format(foundItem))
             if failed:
@@ -5398,7 +5421,7 @@ class DMN():
 
     def decideOneTable(self, table, decisionAnnotations, parentPolicy):
         # Use Decision Table 'table' to make a decision
-        # print('decideOneTable', table, decisionAnnotations, parentPolicy)
+        # print('decideOneTable', table, decisionAnnotations, parentPolicy, self.decisionTables[table]['status'], self.decisionTables[table]['recursionCount'])
 
         # Check for circular references, or decision that have already been made
         if self.decisionTables[table]['status'] == 'being processed':
@@ -5678,21 +5701,21 @@ class DMN():
                                 if (len(thisResult) > 0) and (thisResult[0] == '"') and (thisResult[-1] == '"'):
                                     thisResult = thisResult[1:-1]
                             newData['Result'][variable] = thisResult
-                            ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
-                            if 'annotation' in self.decisionTables[table]:
-                                for annotation in range(len(self.decisionTables[table]['annotation'])):
-                                    name = self.decisionTables[table]['annotation'][annotation]
-                                    text = self.rules[table][foundRule]['annotation'][annotation]
-                                    annotations.append((name, text))
-                            newData['Executed Rule'].append(ruleId)
-                            if len(decisionAnnotations) > 0:
-                                newData['DecisionAnnotations'].append(decisionAnnotations)
-                            else:
-                                newData['DecisionAnnotations'].append([])
-                            if len(annotations) > 0:
-                                newData['RuleAnnotations'].append(annotations)
-                            else:
-                                newData['RuleAnnotations'].append([])
+                        ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
+                        if 'annotation' in self.decisionTables[table]:
+                            for annotation in range(len(self.decisionTables[table]['annotation'])):
+                                name = self.decisionTables[table]['annotation'][annotation]
+                                text = self.rules[table][foundRule]['annotation'][annotation]
+                                annotations.append((name, text))
+                        newData['Executed Rule'].append(ruleId)
+                        if len(decisionAnnotations) > 0:
+                            newData['DecisionAnnotations'].append(decisionAnnotations)
+                        else:
+                            newData['DecisionAnnotations'].append([])
+                        if len(annotations) > 0:
+                            newData['RuleAnnotations'].append(annotations)
+                        else:
+                            newData['RuleAnnotations'].append([])
                     continue
                 # Evalutate the result and store the value
                 item = self.glossary[variable]['item']
@@ -5800,7 +5823,30 @@ class DMN():
                                     if isinstance(thisResult, str):
                                         if (len(thisResult) > 0) and (thisResult[0] == '"') and (thisResult[-1] == '"'):
                                             thisResult = thisResult[1:-1]
-                                    newData['Result'][variable] = thisResult
+                                    if first:
+                                        if len(thisHitPolicy) == 1:
+                                            newData['Result'][variable] = []
+                                        elif thisHitPolicy[1] in ['+', '#']:
+                                            newData['Result'][variable] = 0.0
+                                        else:
+                                            newData['Result'][variable] = None
+                                    if len(thisHitPolicy) == 1:
+                                        newData['Result'][variable].append(thisOutput)
+                                    elif thisHitPolicy[1] == '+':
+                                        newData['Result'][variable] += thisOutput
+                                    elif thisHitPolicy[1] == '<':
+                                        if newData['Result'][variable] is None:
+                                            newData['Result'][variable] = thisOutput
+                                        elif thisOutput < newData['Result'][variable]:
+                                            newData['Result'][variable] = thisOutput
+                                    elif thisHitPolicy[1] == '>':
+                                        if newData['Result'][variable] is None:
+                                            newData['Result'][variable] = thisOutput
+                                        elif thisOutput > newData['Result'][variable]:
+                                            newData['Result'][variable] = thisOutput
+                                    else:
+                                        newData['Result'][variable] += 1.0
+                                first = False   # Done every output variable once
                                 ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
                                 if 'annotation' in self.decisionTables[table]:
                                     for annotation in range(len(self.decisionTables[table]['annotation'])):
@@ -5885,7 +5931,7 @@ class DMN():
                             if (len(thisOutput) > 1) and (thisOutput[0] == '"') and (thisOutput[-1] == '"'):
                                 thisOutput = thisOutput[1:-1]
                         if len(thisHitPolicy) == 1:
-                            newData['Result'][variable] = thisOutput
+                            newData['Result'][variable] = newList
                         elif thisHitPolicy[1] == '+':
                             newData['Result'][variable] += thisOutput
                         elif thisHitPolicy[1] == '<':
@@ -5900,22 +5946,22 @@ class DMN():
                                 newData['Result'][variable] = thisOutput
                         else:
                             newData['Result'][variable] += 1.0
-                        first = False   # Done every output variable once
-                        ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
-                        if 'annotation' in self.decisionTables[table]:
-                            for annotation in range(len(self.decisionTables[table]['annotation'])):
-                                name = self.decisionTables[table]['annotation'][annotation]
-                                text = self.rules[table][foundRule]['annotation'][annotation]
-                                annotations.append((name, text))
-                        newData['Executed Rule'].append(ruleId)
-                        if len(decisionAnnotations) > 0:
-                            newData['DecisionAnnotations'].append(decisionAnnotations)
-                        else:
-                            newData['DecisionAnnotations'].append([])
-                        if len(annotations) > 0:
-                            newData['RuleAnnotations'].append(annotations)
-                        else:
-                            newData['RuleAnnotations'].append([])
+                    first = False   # Done every output variable once
+                    ruleId = (self.decisionTables[table]['name'], table, str(self.rules[table][foundRule]['ruleId']))
+                    if 'annotation' in self.decisionTables[table]:
+                        for annotation in range(len(self.decisionTables[table]['annotation'])):
+                            name = self.decisionTables[table]['annotation'][annotation]
+                            text = self.rules[table][foundRule]['annotation'][annotation]
+                            annotations.append((name, text))
+                    newData['Executed Rule'].append(ruleId)
+                    if len(decisionAnnotations) > 0:
+                        newData['DecisionAnnotations'].append(decisionAnnotations)
+                    else:
+                        newData['DecisionAnnotations'].append([])
+                    if len(annotations) > 0:
+                        newData['RuleAnnotations'].append(annotations)
+                    else:
+                        newData['RuleAnnotations'].append([])
             for variable in newData['Result']:
                 # print('Setting returned value for', variable, 'to', str(newData['Result'][variable]), 'in Decision Table', "'{!s}'".format(table))
                 pass
@@ -6351,10 +6397,10 @@ class DMN():
                    dataAnnotations.append(testData[concept]['annotation'][thisIndex - 1])
             results[thisTest]['data'] = data
             (status, newData) = self.decide(data)
-            if isinstance(newData, list):
-                newData = newData[-1]
             results[thisTest]['newData'] = newData
             results[thisTest]['status'] = status
+            if isinstance(newData, list):
+                newData = newData[-1]
             if len(dataAnnotations) > 0:
                 results[thisTest]['DataAnnotations'] = dataAnnotations
             testStatus.append(status)

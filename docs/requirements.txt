@@ -1,4 +1,4 @@
-pySFeel>=1.4.0
+pySFeel>=1.4.2
 openpyxl
 pandas
 pyDMNrules
