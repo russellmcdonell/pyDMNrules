@@ -1,3 +1,5 @@
+### 1.4.3 - Add check for empty list of Decison Tables - released to PyPI
+ - Added check for an empty list of Decision Tables in decideTables()
 ### 1.4.2 - Minor bug fix and features release - released to PyPI
  - Added support for the contains() function - thanks Leonard Budney (https://github.com/budney)
  - Fixed bug in getTableGlossary() - output rows/columns weren't being output

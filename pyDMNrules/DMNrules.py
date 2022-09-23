@@ -5321,7 +5321,7 @@ class DMN():
             status['errors'] = self.errors
             self.errors = []
             return (status, {})
-        if not isinstance(listOfTables, list):
+        if not isinstance(listOfTables, list) or (len(listOfTables) == 0):
             self.errors.append('Missing list of Decision Tables')
             status = {}
             status['errors'] = self.errors
