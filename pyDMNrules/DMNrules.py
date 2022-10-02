@@ -75,7 +75,7 @@ class DMN():
         (status, returnVal) = self.parser.sFeelParse(text)
         if 'errors' in status:
             self.errors += status['errors']
-            self.errors += ['in text ' + text]
+            self.errors += ['in text "' + text + '"']
             failed = True
         return (failed, returnVal)
 
@@ -1181,35 +1181,66 @@ class DMN():
             self.errors.append("Invalid Data '{!r}' - not a valid S-FEEL data type".format(value))
             return None
 
-    def tableSize(self, cell):
+    def tableSize(self, cell, isDecisionTable):
         # Determine the size of a table
         rows = 1
         cols = 0
-        # The headers must not be null
-        while cell.offset(row=1, column=cols).value is not None:
-            coordinate = cell.offset(row=1, column=cols).coordinate
-            for merged in self.mergedCells:
-                if coordinate in merged:
-                    cols += merged.max_col - merged.min_col + 1
-                    break
-            else:
-                cols += 1
+        # The headers must not be null, but it could be horizontal or vertical or both
+        hitPolicies = ['U', 'A', 'P', 'F', 'C', 'C+', 'C<', 'C>', 'C#', 'O', 'R']
+        thisCell = cell.offset(row=1).value
+        if thisCell is not None:
+            thisCell = str(thisCell).strip()
+        if (thisCell is  None) or (thisCell in hitPolicies) or (isDecisionTable is False):
+            # Rules as rows or non-Decision Table table
+            while cell.offset(row=1, column=cols).value is not None:
+                coordinate = cell.offset(row=1, column=cols).coordinate
+                for merged in self.mergedCells:
+                    if coordinate in merged:
+                        cols += merged.max_col - merged.min_col + 1
+                        break
+                else:
+                    cols += 1
+            if cols == 0:
+                return (rows, cols)
 
-        # A row of all None is the end of the table
-        inTable = True
-        while inTable:
-            inTable = False
-            for col in range(cols):
-                if cell.offset(row=rows, column=col).value is not None:
-                    coordinate = cell.offset(row=rows).coordinate
-                    for merged in self.mergedCells:
-                        if coordinate in merged:
-                            rows += merged.max_row - merged.min_row + 1
-                            break
-                    else:
-                        rows += 1
-                    inTable = True
-                    break
+            # A row of all None is the end of the table
+            inTable = True
+            while inTable:
+                inTable = False
+                for col in range(cols):
+                    if cell.offset(row=rows, column=col).value is not None:
+                        coordinate = cell.offset(row=rows, column=col).coordinate
+                        for merged in self.mergedCells:
+                            if coordinate in merged:
+                                rows += merged.max_row - merged.min_row + 1
+                                break
+                        else:
+                            rows += 1
+                        inTable = True
+                        break
+        else:       # Scan down for the end of the table
+            while cell.offset(row=rows).value is not None:
+                lastCell = cell.offset(row=rows).value
+                lastCell = str(lastCell).strip()
+                rows += 1
+            if rows == 1:
+                return (rows, cols)    # Not a table
+
+            # A column of all None is the end of the table
+            inTable = True
+            while inTable:
+                inTable = False
+                for row in range(rows):
+                    if cell.offset(row=row, column=cols).value is not None:
+                        coordinate = cell.offset(row=row, column=cols).coordinate
+                        for merged in self.mergedCells:
+                            if coordinate in merged:
+                                cols += merged.max_col - merged.min_col + 1
+                                break
+                        else:
+                            cols += 1
+                        inTable = True
+                        break
         return (rows, cols)
 
 
@@ -1228,7 +1259,7 @@ class DMN():
         startRow = cell.row
         startCol = cell.column
         coordinate = cell.coordinate
-        (rows, cols) = self.tableSize(cell)     # Find the length and width of the decision table
+        (rows, cols) = self.tableSize(cell, True)     # Find the length and width of the decision table
         if (rows == 1) and (cols == 0):
             # Empty table
             if failErrors:
@@ -1252,7 +1283,7 @@ class DMN():
                 if lastCoordinate in merged:
                     lastCell = 'X'          # Not a hit policy
         if (thisCell is  None) or (thisCell in hitPolicies):
-            # print('Rules as Rows')
+            # print('Rules as Rows (', rows, ' rows)')
             # Rules as rows
             # Parse the heading
             inputColumns = outputColumns = 0
@@ -1275,7 +1306,7 @@ class DMN():
                         hitPolicy = thisCell
                     if hitPolicy[0] not in ['U', 'A', 'P', 'F', 'C', 'O', 'R']:
                         if failErrors:
-                            self.errors.append("Invalid hit policy '{!s}' for table '{!s}'".format(hitPolicy, table))
+                            self.errors.append("Invalid hit policy '{!s}' for table '{!s}' at '{!s}' on sheet '{!s}'".format(hitPolicy, table, coordinate, sheet))
                         return (rows, cols, -1)
                     if len(hitPolicy) != 1:
                         if (hitPolicy[0] != 'C') or (len(hitPolicy) != 2) or (hitPolicy[1] not in ['+', '<', '>', '#']):
@@ -1333,9 +1364,9 @@ class DMN():
                             if attribute == '':
                                 if failErrors:
                                     if doingInputs:
-                                        self.errors.append("Input heading '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate))
+                                        self.errors.append("Input heading '{!s}' at '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate, sheet))
                                     else:
-                                        self.errors.append("Output heading '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate))
+                                        self.errors.append("Output heading '{!s}' at '{!s'} on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate, sheet))
                                 return (rows, cols, -1)
                             item = 'Data' + '.' + attribute
                             if item in self.glossaryItems:
@@ -1382,7 +1413,7 @@ class DMN():
             # Check that we at least has one output column in the headings
             if outputColumns == 0:
                 if failErrors:
-                    self.errors.append("No Output column in table '{!s}' - missing double bar vertical border".format(table))
+                    self.errors.append("No Output column in table '{!s}' at '{!s}' on sheet '{!s}' - missing double bar vertical border".format(table, coordinate, sheet))
                 return (rows, cols, -1)
             rulesRow = 2
             if doingValidity:
@@ -1520,7 +1551,7 @@ class DMN():
 
         # Check for Rules as Columns
         elif (lastCell is  None) or (lastCell in hitPolicies):
-            # print('Rules as Columns')
+            # print('Rules as Columns (', cols, ' columns)')
             # Rules as columns
             # Parse the footer
             doingValidity = False
@@ -1538,7 +1569,7 @@ class DMN():
                         hitPolicy = thisCell
                     if (not isinstance(hitPolicy, str)) or (hitPolicy[0] not in ['U', 'A', 'P', 'F', 'C', 'O', 'R']):
                         if failErrors:
-                            self.errors.append("Invalid hit policy '{!s}' for table '{!s}'".format(hitPolicy, table))
+                            self.errors.append("Invalid hit policy '{!s}' for table '{!s}' at '{!s}' on sheet '{!s}'".format(hitPolicy, table, coordinate, sheet))
                         return (rows, cols, -1)
                     if len(hitPolicy) != 1:
                         if (hitPolicy[0] != 'C') or (len(hitPolicy) != 2) or (hitPolicy[1] not in ['+', '<', '>', '#']):
@@ -1607,9 +1638,9 @@ class DMN():
                             if attribute == '':
                                 if failErrors:
                                     if doingInputs:
-                                       self.errors.append("Input heading '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate))
+                                       self.errors.append("Input heading '{!s}' at '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate, sheet))
                                     else:
-                                       self.errors.append("Output heading '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate))
+                                       self.errors.append("Output heading '{!s}' at '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate, sheet))
                                 return (rows, cols, -1)
                             item = 'Data' + '.' + attribute
                             if item in self.glossaryItems:
@@ -1656,7 +1687,7 @@ class DMN():
             # Check that we have at least one output column in the headings
             if outputRows == 0:
                 if failErrors:
-                    self.errors.append("No Output row in table '{!s}' - missing double bar horizontal border".format(table))
+                    self.errors.append("No Output row in table '{!s}' at '{!s}' on sheet '{!s}' - missing double bar horizontal border".format(table, coordinate, sheet))
                 return (rows, cols, -1)
 
             rulesCol = 1
@@ -1683,7 +1714,7 @@ class DMN():
                         self.decisionTables[table]['inputValidity'].append((isFixed, fixedValue, validityTest, inputName, coordinate, sheet))
                     elif thisRow <= inputRows + outputRows:
                         ranksFound = True
-                        if self.decisionTables[table]['inputRows'][thisRow - inputRows - 1]['name'] == 'Execute':
+                        if self.decisionTables[table]['outputRows'][thisRow - inputRows - 1]['name'] == 'Execute':
                             self.decisionTables[table]['outputValidity'].append((None, coordinate, sheet))
                         else:
                             self.decisionTables[table]['outputValidity'].append((thisCell, coordinate, sheet))
@@ -1790,7 +1821,7 @@ class DMN():
         else:
             # Rules as crosstab
             # This is the output, and the only output
-            # print('Rules as Crosstab')
+            # print('Rules as Crosstab (', rows, ' rows, ', cols, ' columns)')
             thisCell = cell.offset(row=1).value
             outputVariable = str(thisCell).strip()
             # This should be merged cell - need a row and a column of variables, plus another row and column of tests (as a minimum)
@@ -1802,7 +1833,7 @@ class DMN():
                     break
             else:
                 if failErrors:
-                    self.errors.append("Decision table '{!s}' - unknown DMN rules table type".format(table))
+                    self.errors.append("Decision table '{!s}' at '{!s}' on sheet '{!s}' - unknown DMN rules table type".format(table, coordinate, sheet))
                 return (rows, cols, -1)
 
             # Check that the output variable is in the glossary
@@ -1810,7 +1841,7 @@ class DMN():
                 if outputVariable != 'Execute':
                     if self.haveGlossary:
                         if failErrors:
-                            self.errors.append("Output heading '{!s}' at '{!s}' is not in the Glossary".format(outputVariable, coordinate))
+                            self.errors.append("Output heading '{!s}' at '{!s}' on sheet '{!s}' is not in the Glossary".format(outputVariable, coordinate, sheet))
                         return (rows, cols, -1)
                     else:
                         variable = outputVariable
@@ -1818,7 +1849,7 @@ class DMN():
                         attribute = re.sub(self.badFEELchars, '', variable.replace(' ', '_'))
                         if attribute == '':
                             if failErrors:
-                                self.errors.append("Output heading '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate))
+                                self.errors.append("Output heading '{!s}' at '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate, sheet))
                             return (rows, cols, -1)
                         item = 'Data' + '.' + attribute
                         if item in self.glossaryItems:
@@ -1856,7 +1887,7 @@ class DMN():
             heading = cell.offset(row=1, column=width).value
             if heading is None:
                 if failErrors:
-                    self.errors.append("Crosstab Decision table '{!s}' is missing a horizontal heading".format(table))
+                    self.errors.append("Crosstab Decision table '{!s}' at '{!s}' on sheet '{!s}'  is missing a horizontal heading".format(table, coordinate, sheet))
                 return (rows, cols, -1)
             heading = str(heading).strip()
             if ',' in heading:
@@ -1867,18 +1898,18 @@ class DMN():
                 colInputs = [heading.strip()]
             if len(colInputs) < height - 1:
                 if failErrors:
-                    self.errors.append("Crosstab Decision table '{!s}' is missing one or more rows of horizontal values".format(table))
+                    self.errors.append("Crosstab Decision table '{!s}' at '{!s}' on sheet '{!s}' is missing one or more rows of horizontal values".format(table, coordinate, sheet))
                 return (rows, cols, -1)
             elif len(colInputs) > height - 1:
                 if failErrors:
-                    self.errors.append("Crosstab Decision table '{!s}' has too many rows of horizontal values".format(table))
+                    self.errors.append("Crosstab Decision table '{!s}' at '{!s}' on sheet '{!s}' has too many rows of horizontal values".format(table, coordinate, sheet))
                 return (rows, cols, -1)
             # Check that all the input variable are in the glossary
             for inputVariable in colInputs:
                 if inputVariable not in self.glossary:
                     if self.haveGlossary:
                         if failErrors:
-                            self.errors.append("Horizontal input heading '{!s}' at '{!s}' is not in the Glossary".format(inputVariable, coordinate))
+                            self.errors.append("Horizontal input heading '{!s}' at '{!s}' on sheet '{!s}' is not in the Glossary".format(inputVariable, coordinate, sheet))
                         return (rows, cols, -1)
                     else:
                         variable = inputVariable
@@ -1886,7 +1917,7 @@ class DMN():
                         attribute = re.sub(self.badFEELchars, '', variable.replace(' ', '_'))
                         if attribute == '':
                             if failErrors:
-                                self.errors.append("Horizontal input heading '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate))
+                                self.errors.append("Horizontal input heading '{!s}' at '{!s}' on sheet '{!s}' - cannot be transformed to a valid FEEL name".format(variable, coordinate, sheet))
                             return (rows, cols, -1)
                         item = 'Data' + '.' + attribute
                         if item in self.glossaryItems:
@@ -2179,7 +2210,7 @@ class DMN():
                         thisCell = cell.value
                         if isinstance(thisCell, str):
                             if thisCell.startswith('Glossary'):
-                                (rows, cols) = self.tableSize(cell)
+                                (rows, cols) = self.tableSize(cell, False)
                                 if cols < 3:
                                     self.errors.append('Invalid Glossary - not 3 columns wide')
                                     status = {}
@@ -2320,7 +2351,7 @@ class DMN():
                         thisCell = cell.value
                         if isinstance(thisCell, str):
                             if thisCell.startswith('Decision'):
-                                (rows, cols) = self.tableSize(cell)
+                                (rows, cols) = self.tableSize(cell, False)
                                 if cols < 2:
                                     self.errors.append('Invalid Decision - less than 2 columns wide')
                                     status = {}
@@ -2480,6 +2511,7 @@ class DMN():
                         # self.glossary, self.glossaryLen, self.glossaryItems and self.glossaryConcepts may also be updated
                         table = cell.value
                         table = str(table).strip()
+                        coordinate = cell.coordinate
                         if table in self.decisionTables:
                             self.rules[table] = []
                             failErrors = True
@@ -2510,7 +2542,7 @@ class DMN():
                                 self.glossaryConcepts = savedGlossaryConcepts
                                 continue
                         elif rules == 0:
-                            self.errors.append("Decision table '{!s}' has no rules".format(thisCell))
+                            self.errors.append("Decision table '{!s}' on sheet '{!s}' at '{!s}' has no rules".format(thisCell, sheet, coordinate))
                             status = {}
                             status['errors'] = self.errors
                             return status
@@ -2521,30 +2553,30 @@ class DMN():
                                 for i in range(len(self.decisionTables[table]['inputColumns'])):
                                     thisName = self.decisionTables[table]['inputColumns'][i]['name']
                                     if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                         failed = True
                             if 'inputRows' in self.decisionTables[table]:
                                 for i in range(len(self.decisionTables[table]['inputRows'])):
                                     thisName = self.decisionTables[table]['inputRows'][i]['name']
                                     if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                         failed = True
                             if 'outputColumns' in self.decisionTables[table]:
                                 for i in range(len(self.decisionTables[table]['outputColumns'])):
                                     thisName = self.decisionTables[table]['outputColumns'][i]['name']
                                     if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                         failed = True
                             if 'outputRows' in self.decisionTables[table]:
                                 for i in range(len(self.decisionTables[table]['outputRows'])):
                                     thisName = self.decisionTables[table]['outputRows'][i]['name']
                                     if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}'  on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                         failed = True
                             if 'output' in self.decisionTables[table]:
                                 thisName = self.decisionTables[table]['output']['name']
                                 if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                    self.errors.append("Output heading '{!s}' in the Decision table '{!s}' is not in the Glossary".format(thisName, thisCell))
+                                    self.errors.append("Output heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                     failed = True
                             if failed:
                                 status = {}
@@ -6109,7 +6141,7 @@ class DMN():
                 thisCell = cell.value
                 coordinate = cell.coordinate
                 if isinstance(thisCell, str):
-                    (rows, cols) = self.tableSize(cell)
+                    (rows, cols) = self.tableSize(cell, False)
                     if (rows == 1) and (cols == 0):
                         continue
                     # Check if this is a unit test data table
