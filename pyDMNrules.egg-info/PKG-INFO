@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: pyDMNrules
-Version: 1.4.4
+Version: 1.4.5
 Summary: An implementation of DMN in Python. DMN rules are read from an Excel workbook
 Home-page: https://github.com/russellmcdonell/pyDMNrules
 Author: Russell McDonell
@@ -11,6 +11,20 @@ Classifier: Operating System :: OS Independent
 Requires-Python: >=3.6
 Description-Content-Type: text/markdown
 License-File: LICENSE
+Requires-Dist: datetime
+Requires-Dist: pySFeel
+Requires-Dist: openpyxl
+Requires-Dist: pandas
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 # pyDMNrules
 An implementation of DMN (Decision Model Notation) in Python, using the [pySFeel](https://pypi.org/project/pySFeel/), [openpyxl](https://pypi.org/project/openpyxl/) and [pandas](httpsL//pypi.org/project/pandas) modules.

@@ -1,3 +1,5 @@
+### 1.4.5 - Fix bug in .format() for heading not in Glossary
+ - Format error [ was {!s) ]. Should have been, and now is, {!s}
 ### 1.4.4 - Fix bug parsing Rules as Columns
  - Fixed bug when Rules as Columns Decision Table has allowed values, but the first input has no allowed values
  ### 1.4.3 - Add check for empty list of Decison Tables - released to PyPI

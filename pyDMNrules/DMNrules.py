@@ -2553,30 +2553,30 @@ class DMN():
                                 for i in range(len(self.decisionTables[table]['inputColumns'])):
                                     thisName = self.decisionTables[table]['inputColumns'][i]['name']
                                     if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
+                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s}' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                         failed = True
                             if 'inputRows' in self.decisionTables[table]:
                                 for i in range(len(self.decisionTables[table]['inputRows'])):
                                     thisName = self.decisionTables[table]['inputRows'][i]['name']
                                     if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
+                                        self.errors.append("Input heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s}' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                         failed = True
                             if 'outputColumns' in self.decisionTables[table]:
                                 for i in range(len(self.decisionTables[table]['outputColumns'])):
                                     thisName = self.decisionTables[table]['outputColumns'][i]['name']
                                     if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
+                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s}' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                         failed = True
                             if 'outputRows' in self.decisionTables[table]:
                                 for i in range(len(self.decisionTables[table]['outputRows'])):
                                     thisName = self.decisionTables[table]['outputRows'][i]['name']
                                     if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}'  on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
+                                        self.errors.append("Output heading '{!s}' in the Decision table '{!s}'  on sheet '{!s}' at '{!s}' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                         failed = True
                             if 'output' in self.decisionTables[table]:
                                 thisName = self.decisionTables[table]['output']['name']
                                 if (thisName not in self.glossary) and (thisName != 'Execute'):
-                                    self.errors.append("Output heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s)' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
+                                    self.errors.append("Output heading '{!s}' in the Decision table '{!s}' on sheet '{!s}' at '{!s}' is not in the Glossary".format(thisName, thisCell, sheet, coordinate))
                                     failed = True
                             if failed:
                                 status = {}

@@ -9,3 +9,4 @@ pyDMNrules.egg-info/SOURCES.txt
 pyDMNrules.egg-info/dependency_links.txt
 pyDMNrules.egg-info/requires.txt
 pyDMNrules.egg-info/top_level.txt
+tests/test_pyDMNrules.py
